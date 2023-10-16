@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import { ERC20PermitUpgradeable } from "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 
 /**
  * @title BridgedToken Contract
  * @notice ERC20 token created when a native token is bridged to a target chain.
+ * @custom:security-contact security-report@linea.build
  */
 contract BridgedToken is ERC20PermitUpgradeable {
   address public bridge;
@@ -28,7 +29,7 @@ contract BridgedToken is ERC20PermitUpgradeable {
 
   function initialize(string memory _tokenName, string memory _tokenSymbol, uint8 _tokenDecimals) external initializer {
     __ERC20_init(_tokenName, _tokenSymbol);
-    __EIP712_init(_tokenName, "1");
+    __ERC20Permit_init(_tokenName);
     bridge = msg.sender;
     _decimals = _tokenDecimals;
   }

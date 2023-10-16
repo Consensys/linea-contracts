@@ -53,8 +53,8 @@ export async function encodeSendMessage(
 }
 
 export function getProverTestData(
-  filename: string,
   folder: string,
+  filename: string,
 ): {
   blocks: FormattedBlockData[];
   proverMode: string;
@@ -64,7 +64,7 @@ export function getProverTestData(
   proof: string;
   debugData: DebugData;
 } {
-  const testFilePath = path.resolve(__dirname, "..", "testData", filename, folder);
+  const testFilePath = path.resolve(__dirname, "..", "testData", folder, filename);
   const testData = JSON.parse(fs.readFileSync(testFilePath, "utf8"));
 
   return {

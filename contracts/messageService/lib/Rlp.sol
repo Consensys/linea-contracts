@@ -3,8 +3,9 @@
 /**
  * @author Hamdi Allam hamdi.allam97@gmail.com
  * @notice Please reach out with any questions or concerns.
+ * @custom:security-contact security-report@linea.build
  */
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 error NotList();
 error WrongBytesLength();
@@ -227,7 +228,7 @@ library RLPReader {
     _copy(memPtr, destPtr, len);
   }
 
-  /*
+  /**
    * Private Helpers
    */
 

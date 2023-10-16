@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 interface IMessageService {
   /**
@@ -43,7 +43,7 @@ interface IMessageService {
   error MessageSendingFailed(address destination);
 
   /**
-   * @dev Thrown when the destination address reverts.
+   * @dev Thrown when the recipient address reverts.
    */
   error FeePaymentFailed(address recipient);
 

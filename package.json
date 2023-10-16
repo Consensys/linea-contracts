@@ -22,9 +22,10 @@
     "fmt:sol": "prettier -w 'contracts/**/*.sol'"
   },
   "devDependencies": {
+    "@gnosis.pm/zodiac": "^3.3.2",
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
-    "@openzeppelin/contracts": "^4.9.2",
-    "@openzeppelin/contracts-upgradeable": "^4.9.2",
+    "@openzeppelin/contracts": "^4.9.3",
+    "@openzeppelin/contracts-upgradeable": "^4.9.3",
     "@openzeppelin/hardhat-upgrades": "^1.28.0",
     "@types/diff": "^5.0.3",
     "@types/npmlog": "^4.1.4",
@@ -44,5 +45,8 @@
     "solhint": "^3.4.1",
     "solhint-plugin-prettier": "^0.0.5",
     "yargs": "^17.7.1"
+  },
+  "dependencies": {
+    "hardhat-deploy": "^0.11.37"
   }
 }

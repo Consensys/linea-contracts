@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import { RLPReader } from "./Rlp.sol";
 
@@ -7,19 +7,20 @@ using RLPReader for RLPReader.RLPItem;
 using RLPReader for RLPReader.Iterator;
 using RLPReader for bytes;
 
-/*
+/**
  * dev Thrown when the transaction data length is too short.
  */
 error TransactionShort();
 
-/*
+/**
  * dev Thrown when the transaction type is unknown.
  */
-error UnknownTransactionType();
+error UnknownTransactionType(bytes1 versionByte);
 
 /**
  * @title Contract to decode RLP formatted transactions.
  * @author ConsenSys Software Inc.
+ * @custom:security-contact security-report@linea.build
  */
 library TransactionDecoder {
   /**
@@ -46,7 +47,7 @@ library TransactionDecoder {
       return _decodeLegacyTransaction(_transaction);
     }
 
-    revert UnknownTransactionType();
+    revert UnknownTransactionType(version);
   }
 
   /**
@@ -64,7 +65,7 @@ library TransactionDecoder {
   }
 
   /**
-   * @notice Decodes the EIP29230 transaction extracting the calldata.
+   * @notice Decodes the EIP2930 transaction extracting the calldata.
    * @param _transaction The RLP transaction.
    * @return data Returns the transaction calldata as bytes.
    */

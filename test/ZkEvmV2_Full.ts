@@ -88,7 +88,7 @@ describe("ZK EVM V2 contract with full verifier", () => {
   });
 
   describe("When not paused", () => {
-    describe.skip("Multiple in a row with full proof", () => {
+    describe("Multiple in a row with full proof", () => {
       it("Should fail when starting rootHash does not match last known block starting hash", async () => {
         await expect(
           multiRollupZkEvm
@@ -322,6 +322,8 @@ describe("ZK EVM V2 contract with full verifier", () => {
       });
 
       it.skip("Should fail to process with duplicate data", async () => {
+        const { blocks } = getProverTestData(PROOF_MODE, "rollup-2.json");
+
         for (const tx of getTransactionsToBeDecoded(blocks)) {
           await zkEvm.addL1L2MessageHash(tx);
         }
@@ -346,7 +348,7 @@ describe("ZK EVM V2 contract with full verifier", () => {
 
         const data = getProverTestData(PROOF_MODE, "output-file.json");
         // remove a transaction breaking the hashes
-        data.blocks[0].transactions.pop();
+        data.blocks[0].transactions.push(data.blocks[0].transactions[0]);
 
         await expect(
           zkEvm.connect(operator).finalizeBlocks(data.blocks, proof, 0, parentStateRootHash, { gasLimit: 10_000_000 }),

@@ -43,7 +43,7 @@ npx hardhat node
 In a second terminal, run:
 
 ```shell
-npx hardhat run --network localhost scripts/test/tokenBridge/deployMock.ts
+npx hardhat run --network localhost scripts/tokenBridge/test/deployMock.ts
 ```
 
 ### On a Goerli Testnet network with mocked messaging service
@@ -51,27 +51,20 @@ npx hardhat run --network localhost scripts/test/tokenBridge/deployMock.ts
 In a terminal, run:
 
 ```shell
-npx hardhat run --network goerli scripts/test/tokenBridge/deployMock.ts
+npx hardhat run --network goerli scripts/tokenBridge/test/deployMock.ts
 ```
 
 ### On Goerli Testnet and Goerli Linea Testnet
 
-In a terminal, run:
+To deploy the contracts, you will need to run the Bridged Token, Token Bridge, and Token Bridge operational scripts.
 
-```shell
-make deploy-testnet-token-bridge
-```
+You can refer to the following links that describe the usage of these scripts. <br />
+- [Bridged Token Deployment Script](./deployment.md#bridgedtoken) <br />
+- [Token Bridge Deployment Script](./deployment.md#tokenbridge) <br />
+- [Operational Script](./operational.md#transferownershipandsetremotetokenbridge)
 
-Or
 
-```shell
-npx hardhat run --network zkevm_dev scripts/tokenBridge/deploy-1.ts
-npx hardhat run --network l2 scripts/tokenBridge/deploy-1.ts
-npx hardhat run --network zkevm_dev scripts/tokenBridge/deploy-2.ts
-npx hardhat run --network l2 scripts/tokenBridge/deploy-2.ts
-```
-
-All addresses created will be stored in the deployments.json file at the root of this project
+All addresses created will be stored in the deployments folder as a separate file. `./contracts/deployment/<network_name>`
 
 ## Development
 
@@ -87,12 +80,6 @@ or
 
 ```shell
 npx hardhat test
-```
-
-To run tests on only one file, execute:
-
-```shell
-npx hardhat test test/tokenBridge/TokenBridge.ts
 ```
 
 ### Test coverage

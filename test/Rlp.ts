@@ -156,7 +156,6 @@ describe("Rlp", () => {
   describe("payloadLocation", () => {
     it("Should return the correct payload location", async () => {
       const payload = await contract.payloadLocation(ethers.utils.hexDataSlice(eip1559Transaction, 1));
-      console.log(payload);
       expect(payload.itemlen.toNumber()).to.equal(648);
       expect(payload.ptr.toNumber() - payload.rlpItemPtr.toNumber()).to.equal(3);
     });

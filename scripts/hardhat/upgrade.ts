@@ -10,7 +10,7 @@ Usage:
     export CONTRACT_ADDRESS=0x1234567890123456789012345678901234567890
 
     # if you need to specify a different private key then the one in the files
-    export L1_ROLLUP_OWNER_PRIVATE_KEY=
+    export PRIVATE_KEY=
 
     npx hardhat --network <network> run scripts/hardhat/upgrade.js
 */
