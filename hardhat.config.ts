@@ -4,12 +4,6 @@ import * as dotenv from "dotenv";
 import "hardhat-tracer";
 import { HardhatUserConfig } from "hardhat/config";
 import { MAX_GAS_LIMIT, getBlockchainNode, getContractOwnerPrivateKey, getL2BlockchainNode } from "./common";
-import "./scripts/operational/getCurrentFinalizedBlockNumberTask";
-import "./scripts/operational/grantContractRolesTask";
-import "./scripts/operational/renounceContractRolesTask";
-import "./scripts/operational/setRateLimitTask";
-import "./scripts/operational/setVerifierAddressTask";
-import "./scripts/operational/transferOwnershipAndSetRemoteTokenBridgeTask";
 import "hardhat-deploy";
 
 dotenv.config();
