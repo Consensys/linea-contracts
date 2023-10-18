@@ -235,6 +235,17 @@ describe("L1MessageService", () => {
 
   describe("Claiming messages", () => {
     it("Should fail when the message hash does not exist", async () => {
+      const expectedBytes = await encodeSendMessage(
+        l1MessageService.address,
+        notAuthorizedAccount.address,
+        MESSAGE_FEE,
+        MESSAGE_VALUE_1ETH,
+        BigNumber.from(1),
+        "0x",
+      );
+
+      const messageHash = ethers.utils.keccak256(expectedBytes);
+
       await expect(
         l1MessageService.claimMessage(
           l1MessageService.address,
@@ -245,7 +256,9 @@ describe("L1MessageService", () => {
           "0x",
           1,
         ),
-      ).to.be.revertedWithCustomError(l1MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed");
+      )
+        .to.be.revertedWithCustomError(l1MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed")
+        .withArgs(messageHash);
     });
 
     it("Should execute the claim message and send fees to recipient, left over fee to destination", async () => {
@@ -338,6 +351,8 @@ describe("L1MessageService", () => {
         "0x",
       );
 
+      const messageHash = ethers.utils.keccak256(expectedBytes);
+
       await l1MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
       await l1MessageService.addL2L1MessageHash(ethers.utils.keccak256(expectedBytes));
 
@@ -360,7 +375,9 @@ describe("L1MessageService", () => {
           "0x",
           1,
         ),
-      ).to.be.revertedWithCustomError(l1MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed");
+      )
+        .to.be.revertedWithCustomError(l1MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed")
+        .withArgs(messageHash);
     });
 
     it("Should execute the claim message and send the fees to msg.sender, left over fee to destination", async () => {
@@ -372,12 +389,22 @@ describe("L1MessageService", () => {
         BigNumber.from(1),
         "0x",
       );
+
+      const expectedSecondBytes = await encodeSendMessage(
+        l1MessageService.address,
+        notAuthorizedAccount.address,
+        MESSAGE_FEE,
+        MESSAGE_VALUE_1ETH,
+        BigNumber.from(2),
+        "0x",
+      );
+
       const destinationBalance = await notAuthorizedAccount.getBalance();
 
       await l1MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
       await l1MessageService.addL2L1MessageHash(ethers.utils.keccak256(expectedBytes));
+      await l1MessageService.addL2L1MessageHash(ethers.utils.keccak256(expectedSecondBytes));
 
-      const adminBalance = await admin.getBalance();
       await l1MessageService
         .connect(admin)
         .claimMessage(
@@ -390,7 +417,23 @@ describe("L1MessageService", () => {
           1,
         );
 
-      expect(await notAuthorizedAccount.getBalance()).to.be.greaterThan(destinationBalance.add(MESSAGE_VALUE_1ETH));
+      const adminBalance = await admin.getBalance();
+
+      await l1MessageService
+        .connect(admin)
+        .claimMessage(
+          l1MessageService.address,
+          notAuthorizedAccount.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          ethers.constants.AddressZero,
+          "0x",
+          2,
+        );
+
+      expect(await notAuthorizedAccount.getBalance()).to.be.greaterThan(
+        destinationBalance.add(MESSAGE_VALUE_1ETH).add(MESSAGE_VALUE_1ETH),
+      );
       expect(await admin.getBalance()).to.be.greaterThan(adminBalance);
 
       expect(await l1MessageService.inboxL2L1MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
@@ -700,7 +743,7 @@ describe("L1MessageService", () => {
             callSignature,
             BigNumber.from(1),
           ),
-      ).to.be.revertedWithCustomError(l1MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed");
+      ).to.be.revertedWith("ReentrancyGuard: reentrant call");
     });
 
     it("Should fail when the destination errors", async () => {

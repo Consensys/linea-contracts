@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import { TimelockController } from "@openzeppelin/contracts/governance/TimelockController.sol";
 
@@ -7,7 +7,8 @@ import { TimelockController } from "@openzeppelin/contracts/governance/TimelockC
  * @title TimeLock contract used to manage contract upgrades
  * @author ConsenSys Software Inc.
  * @notice This timelock contract will be the owner of all upgrades that gives users confidence and an ability to exit should they want to before an upgrade takes place
- **/
+ * @custom:security-contact security-report@linea.build
+ */
 contract TimeLock is TimelockController {
   constructor(
     uint256 minDelay,

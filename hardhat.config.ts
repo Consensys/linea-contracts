@@ -4,10 +4,12 @@ import * as dotenv from "dotenv";
 import "hardhat-tracer";
 import { HardhatUserConfig } from "hardhat/config";
 import { MAX_GAS_LIMIT, getBlockchainNode, getContractOwnerPrivateKey, getL2BlockchainNode } from "./common";
+import "hardhat-deploy";
 
 dotenv.config();
 
 const BLOCKCHAIN_TIMEOUT = process.env.BLOCKCHAIN_TIMEOUT_MS ? parseInt(process.env.BLOCKCHAIN_TIMEOUT_MS) : 300000;
+const EMPTY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 const blockchainNode = getBlockchainNode();
 const l2BlockchainNode = getL2BlockchainNode();
@@ -16,7 +18,7 @@ const ownerPrivateKey = getContractOwnerPrivateKey(
   "../node-data/test/keys/contract_owner.acc",
   "/node-data/test/keys/contract_owner.acc",
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  process.env.L1_ROLLUP_OWNER_PRIVATE_KEY!,
+  process.env.PRIVATE_KEY!,
 );
 
 const accounts = [];
@@ -51,7 +53,32 @@ const config: HardhatUserConfig = {
       },
     ],
   },
+  namedAccounts: {
+    deployer: {
+      default: 0,
+    },
+  },
   networks: {
+    mainnet: {
+      accounts: [process.env.MAINNET_PRIVATE_KEY ?? EMPTY_HASH],
+      url: "https://mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
+    linea_mainnet: {
+      accounts: [process.env.LINEA_MAINNET_PRIVATE_KEY ?? EMPTY_HASH],
+      url: "https://linea-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
+    goerli: {
+      accounts: [process.env.GOERLI_PRIVATE_KEY ?? EMPTY_HASH],
+      url: "https://goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
+    linea_goerli: {
+      accounts: [process.env.LINEA_GOERLI_PRIVATE_KEY ?? EMPTY_HASH],
+      url: "https://linea-goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
+    custom: {
+      accounts: [process.env.CUSTOM_PRIVATE_KEY ?? EMPTY_HASH],
+      url: process.env.CUSTOM_BLOCKCHAIN_URL ? process.env.CUSTOM_BLOCKCHAIN_URL : "",
+    },
     besu: {
       url: blockchainNode,
       accounts,
@@ -70,7 +97,7 @@ const config: HardhatUserConfig = {
     },
     zkevm_dev: {
       url: blockchainNode,
-      accounts,
+      accounts: [process.env.PRIVATE_KEY ?? EMPTY_HASH],
       timeout: BLOCKCHAIN_TIMEOUT,
     },
     ...(l2BlockchainNode
@@ -79,7 +106,6 @@ const config: HardhatUserConfig = {
             url: l2BlockchainNode,
             accounts,
             allowUnlimitedContractSize: true,
-            timeout: 300000,
           },
         }
       : {}),
@@ -94,16 +120,25 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: process.env.ETHERSCAN_API_KEY ?? "",
       goerli: process.env.ETHERSCAN_API_KEY ?? "",
-      l2: process.env.LINEASCAN_API_KEY ?? "",
+      linea_goerli: process.env.LINEASCAN_API_KEY ?? "",
+      linea_mainnet: process.env.LINEASCAN_API_KEY ?? "",
       // TODO Add for linea mainnet
     },
     customChains: [
       {
-        network: "l2",
+        network: "linea_goerli",
         chainId: 59140,
         urls: {
           apiURL: "https://api-goerli.lineascan.build/api",
           browserURL: "https://goerli.lineascan.build/",
+        },
+      },
+      {
+        network: "linea_mainnet",
+        chainId: 59144,
+        urls: {
+          apiURL: "https://api.lineascan.build/api",
+          browserURL: "https://lineascan.build/",
         },
       },
     ],

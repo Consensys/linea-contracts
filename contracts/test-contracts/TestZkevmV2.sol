@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import { ZkEvmV2, TransactionDecoder, CodecV2 } from "../ZkEvmV2.sol";
 

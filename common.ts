@@ -1,60 +1,6 @@
-import { ethers } from "ethers";
 import fs from "fs";
 
 const MAX_GAS_LIMIT = process.env.TX_GAS_LIMIT ? parseInt(process.env.TX_GAS_LIMIT) : 500000000;
-
-function getBatchType(
-  numberOfAccountCreates: number,
-  numberOfMoCreates: number,
-  numberOfMoRedeems: number,
-  numberOfAccountUpdates: number,
-  numberOfOutboundTransfers: number,
-  numberOfInboundTransfers: number,
-): ethers.BigNumber {
-  const two = ethers.BigNumber.from(2);
-  let batchType = ethers.BigNumber.from(0);
-  batchType = batchType.add(ethers.BigNumber.from(numberOfAccountCreates));
-  batchType = batchType.add(ethers.BigNumber.from(numberOfMoCreates).mul(two.pow(ethers.BigNumber.from(16))));
-  batchType = batchType.add(ethers.BigNumber.from(numberOfMoRedeems).mul(two.pow(ethers.BigNumber.from(32))));
-  batchType = batchType.add(ethers.BigNumber.from(numberOfAccountUpdates).mul(two.pow(ethers.BigNumber.from(48))));
-  batchType = batchType.add(ethers.BigNumber.from(numberOfOutboundTransfers).mul(two.pow(ethers.BigNumber.from(64))));
-  batchType = batchType.add(ethers.BigNumber.from(numberOfInboundTransfers).mul(two.pow(ethers.BigNumber.from(80))));
-  return batchType;
-}
-
-const accountCreateRegex = /AccountCreate([0-9]+)/;
-const moneyOrderCreateRegex = /MoneyOrderCreate([0-9]+)/;
-const moneyOrderRedeemRegex = /MoneyOrderRedeem([0-9]+)/;
-const accountUpdateRegex = /AccountUpdate([0-9]+)/;
-const outboundTransferRegex = /OutboundTransfer([0-9]+)/;
-const inboundTransferRegex = /InboundTransfer([0-9]+)/;
-
-function matchNumber(filename: string, regex: RegExp): number {
-  let number = 0;
-  const match = filename.match(regex);
-  if (match) {
-    number = parseInt(match[1]);
-  }
-  return number;
-}
-
-function getBatchTypeFromFileName(filename: string): ethers.BigNumber {
-  const numberOfAccountCreates = matchNumber(filename, accountCreateRegex);
-  const numberOfMoCreates = matchNumber(filename, moneyOrderCreateRegex);
-  const numberOfMoRedeems = matchNumber(filename, moneyOrderRedeemRegex);
-  const numberOfAccountUpdates = matchNumber(filename, accountUpdateRegex);
-  const numberOfOutboundTransfers = matchNumber(filename, outboundTransferRegex);
-  const numberOfInboundTransfers = matchNumber(filename, inboundTransferRegex);
-
-  return getBatchType(
-    numberOfAccountCreates,
-    numberOfMoCreates,
-    numberOfMoRedeems,
-    numberOfAccountUpdates,
-    numberOfOutboundTransfers,
-    numberOfInboundTransfers,
-  );
-}
 
 /**
  * Helper function to deal with account JSON files
@@ -112,6 +58,10 @@ function getRollupJsonPath(): string {
 }
 
 export {
-  MAX_GAS_LIMIT, getBatchType, getBatchTypeFromFileName, getBlockchainNode, getContractOwnerPrivateKey, getL2BlockchainNode, getRollupContractConfigPath,
-  getRollupJsonPath
+  MAX_GAS_LIMIT,
+  getBlockchainNode,
+  getContractOwnerPrivateKey,
+  getL2BlockchainNode,
+  getRollupContractConfigPath,
+  getRollupJsonPath,
 };

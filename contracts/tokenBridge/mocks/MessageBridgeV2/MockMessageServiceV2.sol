@@ -17,7 +17,7 @@ contract MockMessageServiceV2 is L1MessageManager, IMessageService, PauseManager
    * @param _to The address the message is intended for.
    * @param _fee The fee being paid for the message delivery.
    * @param _calldata The calldata to pass to the recipient.
-   **/
+   */
   function sendMessage(
     address _to,
     uint256 _fee,

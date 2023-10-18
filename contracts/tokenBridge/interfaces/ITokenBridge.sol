@@ -1,20 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 interface ITokenBridge {
-  event TokenReserved(address token);
-  event CustomContractSet(address nativeToken, address customContract);
-  event BridgingInitiated(address sender, address recipient, address token, uint256 amount);
-  event BridgingFinalized(address nativeToken, address bridgedToken, uint256 amount, address recipient);
-  event NewToken(address token);
-  event NewTokenDeployed(address bridgedToken);
-  event RemoteTokenBridgeSet(address remoteTokenBridge);
-  event TokenDeployed(address token);
-  event DeploymentConfirmed(address[] tokens);
-  event MessageServiceUpdated(address newMessageService, address oldMessageService);
+  event TokenReserved(address indexed token);
+  event CustomContractSet(address indexed nativeToken, address indexed customContract, address indexed setBy);
+  event BridgingInitiated(address indexed sender, address recipient, address indexed token, uint256 indexed amount);
+  event BridgingFinalized(
+    address indexed nativeToken,
+    address indexed bridgedToken,
+    uint256 indexed amount,
+    address recipient
+  );
+  event NewToken(address indexed token);
+  event NewTokenDeployed(address indexed bridgedToken, address indexed nativeToken);
+  event RemoteTokenBridgeSet(address indexed remoteTokenBridge, address indexed setBy);
+  event TokenDeployed(address indexed token);
+  event DeploymentConfirmed(address[] tokens, address indexed confirmedBy);
+  event MessageServiceUpdated(
+    address indexed newMessageService,
+    address indexed oldMessageService,
+    address indexed setBy
+  );
 
-  error NotMessagingService(address sender, address messageService);
-  error NotFromRemoteTokenBridge(address sender, address tokenBridge);
   error ReservedToken(address token);
   error RemoteTokenBridgeAlreadySet(address remoteTokenBridge);
   error AlreadyBridgedToken(address token);
@@ -24,7 +31,6 @@ interface ITokenBridge {
   error ZeroAmountNotAllowed(uint256 amount);
   error NotReserved(address token);
   error TokenNotDeployed(address token);
-  error TokenNativeOnOtherLayer(address token);
   error AlreadyBrigedToNativeTokenSet(address token);
   error StatusAddressNotAllowed(address token);
 
@@ -50,6 +56,7 @@ interface ITokenBridge {
    * @param _nativeToken The address of the token on its native chain.
    * @param _amount The amount of the token to be received.
    * @param _recipient The address that will receive the tokens.
+   * @param _chainId The source chainId or target chaindId for this token
    * @param _tokenMetadata Additional data used to deploy the bridged token if it
    *   doesn't exist already.
    */
@@ -57,6 +64,7 @@ interface ITokenBridge {
     address _nativeToken,
     uint256 _amount,
     address _recipient,
+    uint256 _chainId,
     bytes calldata _tokenMetadata
   ) external;
 

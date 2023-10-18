@@ -8,7 +8,7 @@ import { BAD_STARTING_HASH, INITIAL_WITHDRAW_LIMIT, ONE_DAY_IN_SECONDS } from ".
 import { deployUpgradableFromFactory } from "./utils/deployment";
 import { getProverTestData, getTransactionsToBeDecoded } from "./utils/helpers";
 
-describe("ZK EVM V2 contract with full verifier", () => {
+describe("ZK EVM V2 contract with full large verifier", () => {
   let zkEvm: TestZkEvmV2;
   let multiRollupZkEvm: TestZkEvmV2;
 
@@ -88,7 +88,7 @@ describe("ZK EVM V2 contract with full verifier", () => {
   });
 
   describe("When not paused", () => {
-    describe.skip("Multiple in a row with full proof", () => {
+    describe("Multiple in a row with full proof", () => {
       it("Should fail when starting rootHash does not match last known block starting hash", async () => {
         await expect(
           multiRollupZkEvm
@@ -321,7 +321,7 @@ describe("ZK EVM V2 contract with full verifier", () => {
         ).to.be.revertedWithCustomError(zkEvm, "BlockTimestampError");
       });
 
-      it.skip("Should fail to process with duplicate data", async () => {
+      it("Should fail to process with duplicate data", async () => {
         for (const tx of getTransactionsToBeDecoded(blocks)) {
           await zkEvm.addL1L2MessageHash(tx);
         }

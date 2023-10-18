@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 interface IL2MessageManager {
   /**
@@ -20,7 +20,7 @@ interface IL2MessageManager {
   /**
    * @dev Thrown when the message does not exist or has already been claimed.
    */
-  error MessageDoesNotExistOrHasAlreadyBeenClaimed();
+  error MessageDoesNotExistOrHasAlreadyBeenClaimed(bytes32 messageHash);
 
   /**
    * @notice Anchor L1-> L2 message hashes.

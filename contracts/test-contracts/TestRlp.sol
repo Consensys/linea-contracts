@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.19;
+pragma solidity 0.8.19;
 
 import { RLPReader } from "../messageService/lib/Rlp.sol";
 
@@ -98,7 +98,7 @@ contract TestRlp {
         let byteLen := sub(byte0, 0xb7) // # Of bytes the actual length is.
         _memPtr := add(_memPtr, 1) // Skip over the first byte.
 
-        /* 32 byte word size */
+        // 32 byte word size
         let dataLen := div(mload(_memPtr), exp(256, sub(32, byteLen))) // Right shifting to get the len.
         itemLen := add(dataLen, add(byteLen, 1))
       }

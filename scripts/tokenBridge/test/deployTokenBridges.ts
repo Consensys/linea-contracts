@@ -1,9 +1,11 @@
 import { ethers, upgrades } from "hardhat";
 
 import { deployBridgedTokenBeacon } from "./deployBridgedTokenBeacon";
+import { SupportedChainIds } from "../../../utils/supportedNetworks";
 
 export async function deployTokenBridge(messageServiceAddress: string, verbose = false) {
   const [owner] = await ethers.getSigners();
+  const chainIds = [SupportedChainIds.GOERLI, SupportedChainIds.LINEA_TESTNET];
 
   // Deploy beacon for bridged tokens
   const tokenBeacons = await deployBridgedTokenBeacon(verbose);
@@ -15,6 +17,8 @@ export async function deployTokenBridge(messageServiceAddress: string, verbose =
     owner.address,
     messageServiceAddress,
     tokenBeacons.l1TokenBeacon.address,
+    chainIds[0],
+    chainIds[1],
     [], // Reseved Addresses
   ]);
   await l1TokenBridge.deployed();
@@ -26,6 +30,8 @@ export async function deployTokenBridge(messageServiceAddress: string, verbose =
     owner.address,
     messageServiceAddress,
     tokenBeacons.l2TokenBeacon.address,
+    chainIds[1],
+    chainIds[0],
     [], // Reseved Addresses
   ]);
   await l2TokenBridge.deployed();
@@ -44,7 +50,7 @@ export async function deployTokenBridge(messageServiceAddress: string, verbose =
     console.log("Deployment finished");
   }
 
-  return { l1TokenBridge, l2TokenBridge, ...tokenBeacons };
+  return { l1TokenBridge, l2TokenBridge, chainIds, ...tokenBeacons };
 }
 
 export async function deployTokenBridgeWithMockMessaging(verbose = false) {

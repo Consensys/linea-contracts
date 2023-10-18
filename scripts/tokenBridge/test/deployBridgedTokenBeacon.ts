@@ -1,5 +1,6 @@
 import { ethers, upgrades, network } from "hardhat";
-import { storeAddress } from "../../../utils/storeAddress";
+import { tryStoreAddress } from "../../../utils/storeAddress";
+import { tryVerifyContract } from "../../../utils/verifyContract";
 
 export async function deployBridgedTokenBeacon(verbose = false) {
   const BridgedToken = await ethers.getContractFactory("BridgedToken");
@@ -16,11 +17,11 @@ export async function deployBridgedTokenBeacon(verbose = false) {
     console.log("L2TokenBeacon deployed, at address:", l2TokenBeacon.address);
   }
 
-  // @TODO:
-  // - Verify contracts on Etherscan
+  await tryStoreAddress(network.name, "l1TokenBeacon", l1TokenBeacon.address, l1TokenBeacon.deployTransaction.hash);
+  await tryStoreAddress(network.name, "l2TokenBeacon", l2TokenBeacon.address, l2TokenBeacon.deployTransaction.hash);
 
-  storeAddress("l1TokenBeacon", l1TokenBeacon.address, network.name);
-  storeAddress("l2TokenBeacon", l2TokenBeacon.address, network.name);
+  await tryVerifyContract(l1TokenBeacon.address);
+  await tryVerifyContract(l2TokenBeacon.address);
 
   return { l1TokenBeacon, l2TokenBeacon };
 }
