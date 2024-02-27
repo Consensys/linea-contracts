@@ -1,7 +1,7 @@
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { TestRateLimiter } from "../typechain-types";
 import { DEFAULT_ADMIN_ROLE, ONE_DAY_IN_SECONDS, RATE_LIMIT_SETTER_ROLE } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
@@ -15,7 +15,7 @@ describe("Rate limiter", () => {
   const NINE_HUNDRED_ETH = ethers.utils.parseUnits("900", 18);
 
   async function deployTestRateLimiterFixture(): Promise<TestRateLimiter> {
-    return deployUpgradableFromFactory("TestRateLimiter", [86400, ethers.utils.parseEther("1000")], {
+    return deployUpgradableFromFactory("TestRateLimiter", [ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH.add(NINE_HUNDRED_ETH)], {
       initializer: "initialize(uint256,uint256)",
     }) as Promise<TestRateLimiter>;
   }
@@ -35,20 +35,51 @@ describe("Rate limiter", () => {
     });
 
     it("fails to initialise when not initialising", async () => {
-      await expect(testRateLimiter.tryInitialize(86400, ONE_HUNDRED_ETH)).to.be.revertedWith(
+      await expect(testRateLimiter.tryInitialize(ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH)).to.be.revertedWith(
         "Initializable: contract is not initializing",
       );
     });
 
     it("fails to initialise when the limit is zero", async () => {
       await expect(
-        deployUpgradableFromFactory("TestRateLimiter", [86400, 0], { initializer: "initialize(uint256,uint256)" }),
+        deployUpgradableFromFactory("TestRateLimiter", [ONE_DAY_IN_SECONDS, 0], {
+          initializer: "initialize(uint256,uint256)",
+        }),
       ).to.revertedWithCustomError(testRateLimiter, "LimitIsZero");
+    });
+
+    it("Should emit an RateLimitInitialized when initializing", async () => {
+      const RateLimitInitializedEvent = "0x8f805c372b66240792580418b7328c0c554ae235f0932475c51b026887fe26a9";
+
+      const limitInWei = ONE_HUNDRED_ETH;
+
+      const blockNumBefore = await ethers.provider.getBlockNumber();
+      const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+      const currentTimestamp = blockBefore.timestamp + 1;
+      const currentPeriodEnd = currentTimestamp + ONE_DAY_IN_SECONDS;
+
+      const factory = await ethers.getContractFactory("TestRateLimiter");
+      const contract = await upgrades.deployProxy(factory, [ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH]);
+      await contract.deployed();
+
+      const receipt = await ethers.provider.getTransactionReceipt(contract.deployTransaction.hash);
+
+      const filteredLogs = receipt.logs.filter(
+        (log) => log.address === contract.address && log.topics[0] === RateLimitInitializedEvent,
+      );
+      expect(filteredLogs.length).to.equal(1);
+      const parsedLogs = contract.interface.parseLog(filteredLogs[0]);
+
+      expect(parsedLogs.args.periodInSeconds).to.equal(ONE_DAY_IN_SECONDS);
+
+      expect(parsedLogs.args.limitInWei).to.equal(limitInWei);
+
+      expect(parsedLogs.args.currentPeriodEnd).to.equal(currentPeriodEnd);
     });
 
     it("fails to initialise when the period is zero", async () => {
       await expect(
-        deployUpgradableFromFactory("TestRateLimiter", [0, ethers.utils.parseEther("1000")], {
+        deployUpgradableFromFactory("TestRateLimiter", [0, ONE_HUNDRED_ETH], {
           initializer: "initialize(uint256,uint256)",
         }),
       ).to.revertedWithCustomError(testRateLimiter, "PeriodIsZero");

@@ -1,98 +1,98 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity 0.8.22;
 
-import { IL1MessageManager } from "../../interfaces/IL1MessageManager.sol";
+import { BitMaps } from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
+import { L1MessageManagerV1 } from "./v1/L1MessageManagerV1.sol";
+import { IL1MessageManager } from "../../interfaces/l1/IL1MessageManager.sol";
+import { Utils } from "../../lib/Utils.sol";
 
 /**
- * @title Contract to manage cross-chain message hashes storage and status on L1.
+ * @title Contract to manage cross-chain message rolling hash computation and storage on L1.
  * @author ConsenSys Software Inc.
  * @custom:security-contact security-report@linea.build
  */
-abstract contract L1MessageManager is IL1MessageManager {
-  uint8 public constant INBOX_STATUS_UNKNOWN = 0;
-  uint8 public constant INBOX_STATUS_RECEIVED = 1;
+abstract contract L1MessageManager is L1MessageManagerV1, IL1MessageManager {
+  using BitMaps for BitMaps.BitMap;
+  using Utils for *;
 
-  uint8 public constant OUTBOX_STATUS_UNKNOWN = 0;
-  uint8 public constant OUTBOX_STATUS_SENT = 1;
-  uint8 public constant OUTBOX_STATUS_RECEIVED = 2;
-
-  /// @dev Mapping to store L1->L2 message hashes status.
-  /// @dev messageHash => messageStatus (0: unknown, 1: sent, 2: received).
-  mapping(bytes32 => uint256) public outboxL1L2MessageStatus;
-
-  /// @dev Mapping to store L2->L1 message hashes status.
-  /// @dev messageHash => messageStatus (0: unknown, 1: received).
-  mapping(bytes32 => uint256) public inboxL2L1MessageStatus;
+  mapping(uint256 messageNumber => bytes32 rollingHash) public rollingHashes;
+  BitMaps.BitMap internal _messageClaimedBitMap;
+  mapping(bytes32 merkleRoot => uint256 treeDepth) public l2MerkleRootsDepths;
 
   /// @dev Keep free storage slots for future implementation updates to avoid storage collision.
-  // *******************************************************************************************
-  // NB: THIS GAP HAS BEEN PUSHED OUT IN FAVOUR OF THE GAP INSIDE THE REENTRANCY CODE
-  //uint256[50] private __gap;
-  // NB: DO NOT USE THIS GAP
-  // *******************************************************************************************
+  uint256[50] private __gap_L1MessageManager;
 
   /**
-   * @notice Add a cross-chain L2->L1 message hash in storage.
-   * @dev Once the event is emitted, it should be ready for claiming (post block finalization).
-   * @param  _messageHash Hash of the message.
+   * @notice Take an existing message hash, calculates the rolling hash and stores at the message number.
+   * @param _messageNumber The current message number being sent.
+   * @param _messageHash The hash of the message being sent.
    */
-  function _addL2L1MessageHash(bytes32 _messageHash) internal {
-    if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_UNKNOWN) {
-      revert MessageAlreadyReceived(_messageHash);
+  function _addRollingHash(uint256 _messageNumber, bytes32 _messageHash) internal {
+    unchecked {
+      bytes32 newRollingHash = Utils._efficientKeccak(rollingHashes[_messageNumber - 1], _messageHash);
+
+      rollingHashes[_messageNumber] = newRollingHash;
+      emit RollingHashUpdated(_messageNumber, newRollingHash, _messageHash);
     }
-
-    inboxL2L1MessageStatus[_messageHash] = INBOX_STATUS_RECEIVED;
-
-    emit L2L1MessageHashAddedToInbox(_messageHash);
   }
 
   /**
-   * @notice Update the status of L2->L1 message when a user claims a message on L1.
-   * @dev The L2->L1 message is removed from storage.
-   * @dev Due to the nature of the rollup, we should not get a second entry of this.
-   * @param  _messageHash Hash of the message.
+   * @notice Set the L2->L1 message as claimed when a user claims a message on L1.
+   * @param  _messageNumber The message number on L2.
    */
-  function _updateL2L1MessageStatusToClaimed(bytes32 _messageHash) internal {
-    if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_RECEIVED) {
-      revert MessageDoesNotExistOrHasAlreadyBeenClaimed(_messageHash);
+  function _setL2L1MessageToClaimed(uint256 _messageNumber) internal {
+    if (_messageClaimedBitMap.get(_messageNumber)) {
+      revert MessageAlreadyClaimed(_messageNumber);
     }
-
-    delete inboxL2L1MessageStatus[_messageHash];
+    _messageClaimedBitMap.set(_messageNumber);
   }
 
   /**
-   * @notice Add L1->L2 message hash in storage when a message is sent on L1.
-   * @param  _messageHash Hash of the message.
+   * @notice Add the L2 merkle roots to the storage.
+   * @dev This function is called during block finalization.
+   * @param _newRoots New L2 merkle roots.
    */
-  function _addL1L2MessageHash(bytes32 _messageHash) internal {
-    outboxL1L2MessageStatus[_messageHash] = OUTBOX_STATUS_SENT;
+  function _addL2MerkleRoots(bytes32[] calldata _newRoots, uint256 _treeDepth) internal {
+    for (uint256 i; i < _newRoots.length; ++i) {
+      if (l2MerkleRootsDepths[_newRoots[i]] != 0) {
+        revert L2MerkleRootAlreadyAnchored(_newRoots[i]);
+      }
+
+      l2MerkleRootsDepths[_newRoots[i]] = _treeDepth;
+
+      emit L2MerkleRootAdded(_newRoots[i], _treeDepth);
+    }
   }
 
   /**
-   * @notice Update the status of L1->L2 messages as received when messages has been stored on L2.
-   * @dev The expectation here is that the rollup is limited to 100 hashes being added here - array is not open ended.
-   * @param  _messageHashes List of message hashes.
+   * @notice Emit an event for each L2 block containing L2->L1 messages.
+   * @dev This function is called during block finalization.
+   * @param _l2MessagingBlocksOffsets Is a sequence of uint16 values, where each value plus the last finalized L2 block number.
+   * indicates which L2 blocks have L2->L1 messages.
+   * @param _currentL2BlockNumber Last L2 block number finalized on L1.
    */
-  function _updateL1L2MessageStatusToReceived(bytes32[] memory _messageHashes) internal {
-    uint256 messageHashArrayLength = _messageHashes.length;
-
-    for (uint256 i; i < messageHashArrayLength; ) {
-      bytes32 messageHash = _messageHashes[i];
-      uint256 existingStatus = outboxL1L2MessageStatus[messageHash];
-
-      if (existingStatus == OUTBOX_STATUS_UNKNOWN) {
-        revert L1L2MessageNotSent(messageHash);
-      }
-
-      if (existingStatus != OUTBOX_STATUS_RECEIVED) {
-        outboxL1L2MessageStatus[messageHash] = OUTBOX_STATUS_RECEIVED;
-      }
-
-      unchecked {
-        i++;
-      }
+  function _anchorL2MessagingBlocks(bytes calldata _l2MessagingBlocksOffsets, uint256 _currentL2BlockNumber) internal {
+    if (_l2MessagingBlocksOffsets.length % 2 != 0) {
+      revert BytesLengthNotMultipleOfTwo(_l2MessagingBlocksOffsets.length);
     }
 
-    emit L1L2MessagesReceivedOnL2(_messageHashes);
+    uint256 l2BlockOffset;
+    unchecked {
+      for (uint256 i; i < _l2MessagingBlocksOffsets.length; ) {
+        assembly {
+          l2BlockOffset := shr(240, calldataload(add(_l2MessagingBlocksOffsets.offset, i)))
+        }
+        emit L2MessagingBlockAnchored(_currentL2BlockNumber + l2BlockOffset);
+        i += 2;
+      }
+    }
+  }
+
+  /**
+   * @notice Check if the L2->L1 message is claimed or not.
+   * @param _messageNumber The message number on L2.
+   */
+  function isMessageClaimed(uint256 _messageNumber) external view returns (bool) {
+    return _messageClaimedBitMap.get(_messageNumber);
   }
 }

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.19;
+pragma solidity >=0.8.19 <=0.8.22;
 
+/**
+ * @title Interface declaring rate limiting messaging functions, events and errors.
+ * @author ConsenSys Software Inc.
+ * @custom:security-contact security-report@linea.build
+ */
 interface IRateLimiter {
   /**
    * @dev Thrown when an amount breaches the limit in the period.
@@ -16,6 +21,11 @@ interface IRateLimiter {
    * @dev Thrown when the limit is initialised to zero.
    */
   error LimitIsZero();
+
+  /**
+   * @dev Emitted when the Rate Limit is initialized.
+   */
+  event RateLimitInitialized(uint256 periodInSeconds, uint256 limitInWei, uint256 currentPeriodEnd);
 
   /**
    * @dev Emitted when the amount in the period is reset to zero.

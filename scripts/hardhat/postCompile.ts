@@ -7,7 +7,7 @@ import Diff from "diff";
 const UNCHANGED_COLOR = "grey";
 const MAX_UNCHANGED_PART_LEN = 100;
 
-const EXPOSED_CONTRACTS = ["L2MessageService", "ZkEvmV2", "TimeLock"];
+const EXPOSED_CONTRACTS = ["L2MessageService", "LineaRollup", "TimeLock"];
 
 async function main() {
   const checkOnly = process.env.CHECK_ONLY === "1";

@@ -3,9 +3,12 @@ import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddre
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { tryVerifyContract } from "../utils/verifyContract";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
+  validateDeployBranchAndTags(hre.network.name);
+
   const contractName = "BridgedToken";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
 

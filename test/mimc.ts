@@ -1,9 +1,9 @@
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { deployFromFactory } from "./utils/deployment";
 import { Mimc } from "../typechain-types";
 import mimcTestData from "./testData/mimc-test-data.json";
+import { deployFromFactory } from "./utils/deployment";
 
 describe("Mimc", () => {
   let mimc: Mimc;

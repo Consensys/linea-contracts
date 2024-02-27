@@ -1,29 +1,37 @@
 import { ethers } from "hardhat";
+import { generateKeccak256 } from "./helpers";
 
-// TODO FIX IMPORT
-const generateKeccak256Hash = (str: string) => ethers.utils.keccak256(ethers.utils.toUtf8Bytes(str));
+export const HASH_ZERO = ethers.constants.HashZero;
+export const ADDRESS_ZERO = ethers.constants.AddressZero;
+export const HASH_WITHOUT_ZERO_FIRST_BYTE = "0xf887bbc07b0e849fb625aafadf4cb6b65b98e492fbb689705312bf1db98ead7f";
+
+// Linea XP Token roles
+export const MINTER_ROLE = generateKeccak256(["string"], ["MINTER_ROLE"], true);
 
 // TimeLock roles
-export const TIMELOCK_ADMIN_ROLE = generateKeccak256Hash("TIMELOCK_ADMIN_ROLE");
-export const PROPOSER_ROLE = generateKeccak256Hash("PROPOSER_ROLE");
-export const EXECUTOR_ROLE = generateKeccak256Hash("EXECUTOR_ROLE");
-export const CANCELLER_ROLE = generateKeccak256Hash("CANCELLER_ROLE");
+export const TIMELOCK_ADMIN_ROLE = generateKeccak256(["string"], ["TIMELOCK_ADMIN_ROLE"], true);
+export const PROPOSER_ROLE = generateKeccak256(["string"], ["PROPOSER_ROLE"], true);
+export const EXECUTOR_ROLE = generateKeccak256(["string"], ["EXECUTOR_ROLE"], true);
+export const CANCELLER_ROLE = generateKeccak256(["string"], ["CANCELLER_ROLE"], true);
 
 // Roles hashes
-export const DEFAULT_ADMIN_ROLE = ethers.constants.HashZero;
-export const RATE_LIMIT_SETTER_ROLE = generateKeccak256Hash("RATE_LIMIT_SETTER_ROLE");
-export const L1_L2_MESSAGE_SETTER_ROLE = generateKeccak256Hash("L1_L2_MESSAGE_SETTER_ROLE");
-export const PAUSE_MANAGER_ROLE = generateKeccak256Hash("PAUSE_MANAGER_ROLE");
-export const MINIMUM_FEE_SETTER_ROLE = generateKeccak256Hash("MINIMUM_FEE_SETTER_ROLE");
-export const OPERATOR_ROLE = generateKeccak256Hash("OPERATOR_ROLE");
-export const BAD_STARTING_HASH = generateKeccak256Hash("BAD_STARTING_HASH");
+export const DEFAULT_ADMIN_ROLE = HASH_ZERO;
+export const RATE_LIMIT_SETTER_ROLE = generateKeccak256(["string"], ["RATE_LIMIT_SETTER_ROLE"], true);
+export const L1_L2_MESSAGE_SETTER_ROLE = generateKeccak256(["string"], ["L1_L2_MESSAGE_SETTER_ROLE"], true);
+export const PAUSE_MANAGER_ROLE = generateKeccak256(["string"], ["PAUSE_MANAGER_ROLE"], true);
+export const MINIMUM_FEE_SETTER_ROLE = generateKeccak256(["string"], ["MINIMUM_FEE_SETTER_ROLE"], true);
+export const OPERATOR_ROLE = generateKeccak256(["string"], ["OPERATOR_ROLE"], true);
+export const VERIFIER_SETTER_ROLE = generateKeccak256(["string"], ["VERIFIER_SETTER_ROLE"], true);
+export const L1_MERKLE_ROOTS_SETTER_ROLE = generateKeccak256(["string"], ["L1_MERKLE_ROOTS_SETTER_ROLE"], true);
+export const L2_MERKLE_ROOTS_SETTER_ROLE = generateKeccak256(["string"], ["L2_MERKLE_ROOTS_SETTER_ROLE"], true);
+export const BAD_STARTING_HASH = generateKeccak256(["string"], ["BAD_STARTING_HASH"], true);
 
-export const INITIAL_MIGRATION_BLOCK = 0;
-export const L1_L2_PAUSE_TYPE = generateKeccak256Hash("L1_L2_PAUSE_TYPE");
-export const L2_L1_PAUSE_TYPE = generateKeccak256Hash("L2_L1_PAUSE_TYPE");
-export const PROVING_SYSTEM_PAUSE_TYPE = generateKeccak256Hash("PROVING_SYSTEM_PAUSE_TYPE");
-export const GENERAL_PAUSE_TYPE = generateKeccak256Hash("GENERAL_PAUSE_TYPE");
+export const GENERAL_PAUSE_TYPE = 1;
+export const L1_L2_PAUSE_TYPE = 2;
+export const L2_L1_PAUSE_TYPE = 3;
+export const PROVING_SYSTEM_PAUSE_TYPE = 4;
 
+// Message statuses
 export const INBOX_STATUS_UNKNOWN = 0;
 export const INBOX_STATUS_RECEIVED = 1;
 export const INBOX_STATUS_CLAIMED = 2;
@@ -32,8 +40,11 @@ export const OUTBOX_STATUS_UNKNOWN = 0;
 export const OUTBOX_STATUS_SENT = 1;
 export const OUTBOX_STATUS_RECEIVED = 2;
 
+export const INITIAL_MIGRATION_BLOCK = 0;
 export const ONE_DAY_IN_SECONDS = 86_400;
 export const INITIAL_WITHDRAW_LIMIT = ethers.utils.parseEther("5");
+export const VERY_HIGH_MIGRATION_BLOCK = ethers.BigNumber.from(1_000_000);
+export const TEST_PUBLIC_VERIFIER_INDEX = ethers.BigNumber.from(0);
 
 export const MESSAGE_VALUE_1ETH = ethers.utils.parseEther("1");
 export const ZERO_VALUE = 0;
@@ -41,9 +52,19 @@ export const MESSAGE_FEE = ethers.utils.parseEther("0.05");
 export const LOW_NO_REFUND_MESSAGE_FEE = ethers.utils.parseEther("0.00001");
 export const MINIMUM_FEE = ethers.utils.parseEther("0.1");
 export const DEFAULT_MESSAGE_NONCE = ethers.utils.parseEther("123456789");
-export const SAMPLE_FUNCTION_CALLDATA = generateKeccak256Hash("callThisFunction()").substring(0, 10); //0x + 4bytes
+export const SAMPLE_FUNCTION_CALLDATA = generateKeccak256(["string"], ["callThisFunction()"], true).substring(0, 10); //0x + 4bytes
 export const EMPTY_CALLDATA = "0x";
 export const BLOCK_COINBASE = "0xc014ba5ec014ba5ec014ba5ec014ba5ec014ba5e";
+
+export const DEFAULT_SUBMISSION_DATA = {
+  dataParentHash: HASH_ZERO,
+  compressedData: "0x",
+  finalBlockInData: ethers.BigNumber.from(0),
+  firstBlockInData: ethers.BigNumber.from(0),
+  parentStateRootHash: HASH_ZERO,
+  finalStateRootHash: HASH_ZERO,
+  snarkHash: HASH_ZERO,
+};
 
 // TODO CLEANUP TO MAKE THIS DYNAMIC AND NOT CONSTANT
 export const Add_L1L2_Message_Hashes_Calldata_With_Empty_Array =

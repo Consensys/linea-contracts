@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity >=0.8.19 <=0.8.22;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -25,7 +25,7 @@ contract RateLimiter is Initializable, IRateLimiter, AccessControlUpgradeable {
   // @notice Amounts already withdrawn this period.
   uint256 public currentPeriodAmountInWei;
 
-  uint256[10] private _gap;
+  uint256[10] private __gap;
 
   /**
    * @notice Initialises the limits and period for the rate limiter.
@@ -44,6 +44,8 @@ contract RateLimiter is Initializable, IRateLimiter, AccessControlUpgradeable {
     periodInSeconds = _periodInSeconds;
     limitInWei = _limitInWei;
     currentPeriodEnd = block.timestamp + _periodInSeconds;
+
+    emit RateLimitInitialized(periodInSeconds, limitInWei, currentPeriodEnd);
   }
 
   /**

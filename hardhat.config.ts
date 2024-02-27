@@ -5,6 +5,7 @@ import "hardhat-tracer";
 import { HardhatUserConfig } from "hardhat/config";
 import { MAX_GAS_LIMIT, getBlockchainNode, getContractOwnerPrivateKey, getL2BlockchainNode } from "./common";
 import "hardhat-deploy";
+import "hardhat-storage-layout";
 
 dotenv.config();
 
@@ -34,12 +35,22 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
+        version: "0.8.22",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 1000,
+          },
+        },
+      },
+      {
         version: "0.8.19",
         settings: {
           optimizer: {
             enabled: true,
-            runs: 100000,
+            runs: 1000,
           },
+          evmVersion: "london",
         },
       },
       {
@@ -47,8 +58,9 @@ const config: HardhatUserConfig = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 100000,
+            runs: 1000,
           },
+          evmVersion: "london",
         },
       },
     ],
@@ -96,6 +108,7 @@ const config: HardhatUserConfig = {
       timeout: BLOCKCHAIN_TIMEOUT,
     },
     zkevm_dev: {
+      gasPrice: 1322222229,
       url: blockchainNode,
       accounts: [process.env.PRIVATE_KEY ?? EMPTY_HASH],
       timeout: BLOCKCHAIN_TIMEOUT,
@@ -122,7 +135,6 @@ const config: HardhatUserConfig = {
       goerli: process.env.ETHERSCAN_API_KEY ?? "",
       linea_goerli: process.env.LINEASCAN_API_KEY ?? "",
       linea_mainnet: process.env.LINEASCAN_API_KEY ?? "",
-      // TODO Add for linea mainnet
     },
     customChains: [
       {

@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 import { OPERATOR_ROLE } from "../../test/utils/constants";
-import { ZkEvmV2Init__factory } from "../../typechain-types";
+import { LineaRollupInit__factory, LineaRollup__factory } from "../../typechain-types";
 
 const main = async () => {
   const initialL2BlockNumber = "1987654321";
@@ -19,6 +19,13 @@ const main = async () => {
 
   console.log("Encoded TX Output:");
   console.log("\n");
+
+  const upgradeCallWithReinitSystemMigrationBlock = LineaRollup__factory.createInterface().encodeFunctionData(
+    "initializeSystemMigrationBlock",
+    [1000000],
+  );
+
+  console.log("upgradeCallWithReinitSystemMigrationBlock", upgradeCallWithReinitSystemMigrationBlock);
 
   const upgradeCallUsingSecurityCouncil = ethers.utils.hexConcat([
     "0x99a88ec4",
@@ -61,7 +68,7 @@ const main = async () => {
       [
         proxyContract,
         NewImplementation,
-        ZkEvmV2Init__factory.createInterface().encodeFunctionData("initializeV2", [
+        LineaRollupInit__factory.createInterface().encodeFunctionData("initializeV2", [
           initialL2BlockNumber,
           initialStateRootHash,
         ]),
