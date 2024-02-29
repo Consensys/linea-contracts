@@ -5,15 +5,15 @@ import { TestPlonkVerifier } from "../../typechain-types";
 import { deployFromFactory } from "../utils/deployment";
 import { getProverTestData } from "../utils/helpers";
 
-describe("test plonk", () => {
-  let zkEvm: TestPlonkVerifier;
+describe("Test Plonk Verifier", () => {
+  let plonkVerifier: TestPlonkVerifier;
 
-  async function deployZkEvmFixture() {
+  async function deployPlonkVerifierFixture() {
     return deployFromFactory("TestPlonkVerifier") as Promise<TestPlonkVerifier>;
   }
 
   beforeEach(async () => {
-    zkEvm = await loadFixture(deployZkEvmFixture);
+    plonkVerifier = await loadFixture(deployPlonkVerifierFixture);
   });
 
   describe("test_verifier_go", () => {
@@ -24,7 +24,7 @@ describe("test plonk", () => {
       } = getProverTestData("Light", "output-file.json");
 
       expect(
-        await zkEvm.test_verifier_go(proof, [BigNumber.from(finalHash)], {
+        await plonkVerifier.test_verifier_go(proof, [BigNumber.from(finalHash)], {
           gasLimit: 500_000,
         }),
       ).to.not.be.reverted;

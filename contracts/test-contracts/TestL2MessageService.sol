@@ -63,11 +63,7 @@ contract TestL2MessageService is L2MessageService {
 
   function addFunds() external payable {}
 
-  fallback() external payable {
-    revert();
-  }
-
-  receive() external payable override {
+  function makeItRevert() external payable {
     revert();
   }
 }

@@ -3,9 +3,12 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { deployFromFactory } from "../scripts/hardhat/utils";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
+  validateDeployBranchAndTags(hre.network.name);
+
   const contractName = "PlonkVerifier";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
 

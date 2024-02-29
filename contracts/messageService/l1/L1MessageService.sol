@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity 0.8.22;
 
-import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-
-import { IMessageService } from "../../interfaces/IMessageService.sol";
-import { IGenericErrors } from "../../interfaces/IGenericErrors.sol";
-import { PauseManager } from "../lib/PauseManager.sol";
-import { RateLimiter } from "../lib/RateLimiter.sol";
+import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import { L1MessageServiceV1 } from "./v1/L1MessageServiceV1.sol";
 import { L1MessageManager } from "./L1MessageManager.sol";
+import { IL1MessageService } from "../../interfaces/l1/IL1MessageService.sol";
+import { IGenericErrors } from "../../interfaces/IGenericErrors.sol";
+import { SparseMerkleTreeVerifier } from "../lib/SparseMerkleTreeVerifier.sol";
 
 /**
  * @title Contract to manage cross-chain messaging on L1.
@@ -16,26 +14,18 @@ import { L1MessageManager } from "./L1MessageManager.sol";
  * @custom:security-contact security-report@linea.build
  */
 abstract contract L1MessageService is
-  Initializable,
-  RateLimiter,
+  AccessControlUpgradeable,
+  L1MessageServiceV1,
   L1MessageManager,
-  ReentrancyGuardUpgradeable,
-  PauseManager,
-  IMessageService,
+  IL1MessageService,
   IGenericErrors
 {
-  // @dev This is initialised to save user cost with existing slot.
-  uint256 public nextMessageNumber;
+  using SparseMerkleTreeVerifier for *;
 
-  address private _messageSender;
+  uint256 public systemMigrationBlock;
 
   // Keep free storage slots for future implementation updates to avoid storage collision.
-  uint256[50] private __gap;
-
-  // @dev adding these should not affect storage as they are constants and are stored in bytecode.
-  uint256 private constant REFUND_OVERHEAD_IN_GAS = 42000;
-
-  address private constant DEFAULT_SENDER_ADDRESS = address(123456789);
+  uint256[50] private __gap_L1MessageService;
 
   /**
    * @notice Initialises underlying message service dependencies.
@@ -44,12 +34,14 @@ abstract contract L1MessageService is
    * @param _pauseManagerAddress The address owning the pause management role.
    * @param _rateLimitPeriod The period to rate limit against.
    * @param _rateLimitAmount The limit allowed for withdrawing the period.
+   * @param _systemMigrationBlock The service migration block.
    */
   function __MessageService_init(
     address _limitManagerAddress,
     address _pauseManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount
+    uint256 _rateLimitAmount,
+    uint256 _systemMigrationBlock
   ) internal onlyInitializing {
     if (_limitManagerAddress == address(0)) {
       revert ZeroAddressNotAllowed();
@@ -67,8 +59,25 @@ abstract contract L1MessageService is
     _grantRole(RATE_LIMIT_SETTER_ROLE, _limitManagerAddress);
     _grantRole(PAUSE_MANAGER_ROLE, _pauseManagerAddress);
 
+    __SystemMigrationBlock_init(_systemMigrationBlock);
+
     nextMessageNumber = 1;
     _messageSender = DEFAULT_SENDER_ADDRESS;
+  }
+
+  /**
+   * @notice Initializer function when upgrading.
+   * @dev Sets the systemMigrationBlock when the migration will occur.
+   * @param _systemMigrationBlock The future migration block.
+   */
+  function __SystemMigrationBlock_init(uint256 _systemMigrationBlock) internal onlyInitializing {
+    if (_systemMigrationBlock == 0) {
+      revert SystemMigrationBlockZero();
+    }
+
+    systemMigrationBlock = _systemMigrationBlock;
+
+    emit SystemMigrationBlockInitialized(systemMigrationBlock);
   }
 
   /**
@@ -83,7 +92,7 @@ abstract contract L1MessageService is
     address _to,
     uint256 _fee,
     bytes calldata _calldata
-  ) external payable whenTypeNotPaused(L1_L2_PAUSE_TYPE) whenTypeNotPaused(GENERAL_PAUSE_TYPE) {
+  ) external payable whenTypeAndGeneralNotPaused(L1_L2_PAUSE_TYPE) {
     if (_to == address(0)) {
       revert ZeroAddressNotAllowed();
     }
@@ -92,54 +101,63 @@ abstract contract L1MessageService is
       revert ValueSentTooLow();
     }
 
-    uint256 messageNumber = nextMessageNumber;
+    uint256 messageNumber = nextMessageNumber++;
     uint256 valueSent = msg.value - _fee;
 
     bytes32 messageHash = keccak256(abi.encode(msg.sender, _to, _fee, valueSent, messageNumber, _calldata));
 
-    // @dev Status check and revert is in the message manager
-    _addL1L2MessageHash(messageHash);
-
-    nextMessageNumber++;
+    if (systemMigrationBlock > block.number) {
+      _addL1L2MessageHash(messageHash);
+    } else {
+      _addRollingHash(messageNumber, messageHash);
+    }
 
     emit MessageSent(msg.sender, _to, _fee, valueSent, messageNumber, _calldata, messageHash);
   }
 
   /**
-   * @notice Claims and delivers a cross-chain message.
-   * @dev _feeRecipient can be set to address(0) to receive as msg.sender.
-   * @dev _messageSender is set temporarily when claiming and reset post. Used in sender().
-   * @dev _messageSender is reset to DEFAULT_SENDER_ADDRESS to be more gas efficient.
-   * @param _from The address of the original sender.
-   * @param _to The address the message is intended for.
-   * @param _fee The fee being paid for the message delivery.
-   * @param _value The value to be transferred to the destination address.
-   * @param _feeRecipient The recipient for the fee.
-   * @param _calldata The calldata to pass to the recipient.
-   * @param _nonce The unique auto generated nonce used when sending the message.
+   * @notice Claims and delivers a cross-chain message using merkle proof.
+   * @dev if merkle depth is empty, it will revert with L2MerkleRootDoesNotExist.
+   * @dev if merkle depth is different than proof size, it will revert with ProofLengthDifferentThanMerkleDepth.
+   * @param _params Collection of claim data with proof and supporting data.
    */
-  function claimMessage(
-    address _from,
-    address _to,
-    uint256 _fee,
-    uint256 _value,
-    address payable _feeRecipient,
-    bytes calldata _calldata,
-    uint256 _nonce
-  ) external nonReentrant distributeFees(_fee, _to, _calldata, _feeRecipient) {
-    _requireTypeNotPaused(L2_L1_PAUSE_TYPE);
-    _requireTypeNotPaused(GENERAL_PAUSE_TYPE);
+  function claimMessageWithProof(
+    ClaimMessageWithProofParams calldata _params
+  ) external nonReentrant distributeFees(_params.fee, _params.to, _params.data, _params.feeRecipient) {
+    _requireTypeAndGeneralNotPaused(L2_L1_PAUSE_TYPE);
 
-    bytes32 messageHash = keccak256(abi.encode(_from, _to, _fee, _value, _nonce, _calldata));
+    uint256 merkleDepth = l2MerkleRootsDepths[_params.merkleRoot];
 
-    // @dev Status check and revert is in the message manager.
-    _updateL2L1MessageStatusToClaimed(messageHash);
+    if (merkleDepth == 0) {
+      revert L2MerkleRootDoesNotExist();
+    }
 
-    _addUsedAmount(_fee + _value);
+    if (merkleDepth != _params.proof.length) {
+      revert ProofLengthDifferentThanMerkleDepth(merkleDepth, _params.proof.length);
+    }
 
-    _messageSender = _from;
+    _setL2L1MessageToClaimed(_params.messageNumber);
 
-    (bool callSuccess, bytes memory returnData) = _to.call{ value: _value }(_calldata);
+    _addUsedAmount(_params.fee + _params.value);
+
+    bytes32 messageLeafHash = keccak256(
+      abi.encode(_params.from, _params.to, _params.fee, _params.value, _params.messageNumber, _params.data)
+    );
+
+    if (
+      !SparseMerkleTreeVerifier._verifyMerkleProof(
+        messageLeafHash,
+        _params.proof,
+        _params.leafIndex,
+        _params.merkleRoot
+      )
+    ) {
+      revert InvalidMerkleProof();
+    }
+
+    _messageSender = _params.from;
+
+    (bool callSuccess, bytes memory returnData) = _params.to.call{ value: _params.value }(_params.data);
     if (!callSuccess) {
       if (returnData.length > 0) {
         assembly {
@@ -147,13 +165,13 @@ abstract contract L1MessageService is
           revert(add(32, returnData), data_size)
         }
       } else {
-        revert MessageSendingFailed(_to);
+        revert MessageSendingFailed(_params.to);
       }
     }
 
     _messageSender = DEFAULT_SENDER_ADDRESS;
 
-    emit MessageClaimed(messageHash);
+    emit MessageClaimed(messageLeafHash);
   }
 
   /**
@@ -162,62 +180,5 @@ abstract contract L1MessageService is
    */
   function sender() external view returns (address) {
     return _messageSender;
-  }
-
-  /**
-   * @notice Function to receive funds for liquidity purposes.
-   */
-  receive() external payable virtual {}
-
-  /**
-   * @notice The unspent fee is refunded if applicable.
-   * @param _feeInWei The fee paid for delivery in Wei.
-   * @param _to The recipient of the message and gas refund.
-   * @param _calldata The calldata of the message.
-   */
-  modifier distributeFees(
-    uint256 _feeInWei,
-    address _to,
-    bytes calldata _calldata,
-    address _feeRecipient
-  ) {
-    //pre-execution
-    uint256 startingGas = gasleft();
-    _;
-    //post-execution
-
-    // we have a fee
-    if (_feeInWei > 0) {
-      // default postman fee
-      uint256 deliveryFee = _feeInWei;
-
-      // do we have empty calldata?
-      if (_calldata.length == 0) {
-        bool isDestinationEOA;
-
-        assembly {
-          isDestinationEOA := iszero(extcodesize(_to))
-        }
-
-        // are we calling an EOA
-        if (isDestinationEOA) {
-          // initial + cost to call and refund minus gasleft
-          deliveryFee = (startingGas + REFUND_OVERHEAD_IN_GAS - gasleft()) * tx.gasprice;
-
-          if (_feeInWei > deliveryFee) {
-            payable(_to).send(_feeInWei - deliveryFee);
-          } else {
-            deliveryFee = _feeInWei;
-          }
-        }
-      }
-
-      address feeReceiver = _feeRecipient == address(0) ? msg.sender : _feeRecipient;
-
-      bool callSuccess = payable(feeReceiver).send(deliveryFee);
-      if (!callSuccess) {
-        revert FeePaymentFailed(feeReceiver);
-      }
-    }
   }
 }

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.19;
+pragma solidity >=0.8.19 <=0.8.22;
 
+/**
+ * @title Interface declaring pre-existing cross-chain messaging functions, events and errors.
+ * @author ConsenSys Software Inc.
+ * @custom:security-contact security-report@linea.build
+ */
 interface IMessageService {
   /**
    * @dev Emitted when a message is sent.
@@ -25,11 +30,6 @@ interface IMessageService {
    * @dev Thrown when fees are lower than the minimum fee.
    */
   error FeeTooLow();
-
-  /**
-   * @dev Thrown when fees are lower than value.
-   */
-  error ValueShouldBeGreaterThanFee();
 
   /**
    * @dev Thrown when the value sent is less than the fee.
@@ -58,7 +58,7 @@ interface IMessageService {
 
   /**
    * @notice Deliver a message to the destination chain.
-   * @notice Is called automatically by the Postman, dApp or end user.
+   * @notice Is called by the Postman, dApp or end user.
    * @param _from The msg.sender calling the origin message service.
    * @param _to The destination address on the destination chain.
    * @param _value The value to be transferred to the destination address.

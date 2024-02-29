@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.19;
+pragma solidity >=0.8.19 <=0.8.22;
 
 import { IMessageService } from "../../../interfaces/IMessageService.sol";
 import { IGenericErrors } from "../../../interfaces/IGenericErrors.sol";
@@ -22,7 +22,7 @@ contract MockMessageServiceV2 is L1MessageManager, IMessageService, PauseManager
     address _to,
     uint256 _fee,
     bytes calldata _calldata
-  ) external payable whenTypeNotPaused(L1_L2_PAUSE_TYPE) whenTypeNotPaused(GENERAL_PAUSE_TYPE) {
+  ) external payable whenTypeAndGeneralNotPaused(L1_L2_PAUSE_TYPE) {
     if (_to == address(0)) {
       revert ZeroAddressNotAllowed();
     }

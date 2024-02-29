@@ -4,10 +4,13 @@ import { deployFromFactory, requireEnv } from "../scripts/hardhat/utils";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
 import { get1559Fees } from "../scripts/utils";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 import { ethers } from "hardhat";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
+  validateDeployBranchAndTags(hre.network.name);
+
   const contractName = "TimeLock";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
 

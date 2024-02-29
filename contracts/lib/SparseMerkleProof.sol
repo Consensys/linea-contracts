@@ -24,7 +24,7 @@ library SparseMerkleProof {
 
   error WrongBytesLength(uint256 expectedLength, uint256 bytesLength);
 
-  uint256 private constant TREE_DEPTH = 40;
+  uint256 internal constant TREE_DEPTH = 40;
 
   /**
    * @notice Format input and verify sparse merkle proof

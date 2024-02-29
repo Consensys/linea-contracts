@@ -3,16 +3,19 @@ import { getDeployedContractAddress, tryStoreAddress, tryStoreProxyAdminAddress 
 import { tryVerifyContract } from "../utils/verifyContract";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
+  validateDeployBranchAndTags(hre.network.name);
+
   const contractName = "TokenBridge";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
 
   const L2MessageServiceName = "L2MessageService";
-  const zkEvmV2Name = "ZkEvmV2";
+  const LineaRollupName = "LineaRollup";
   let l2MessageServiceAddress = process.env.L2_MESSAGE_SERVICE_ADDRESS;
-  let zkEvmV2Address = process.env.ZKEVMV2_ADDRESS;
+  let LineaRollupAddress = process.env.LINEA_ROLLUP_ADDRESS;
   const remoteChainId = process.env.REMOTE_CHAIN_ID;
 
   const [owner] = await ethers.getSigners();
@@ -24,8 +27,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     l2MessageServiceAddress = await getDeployedContractAddress(L2MessageServiceName, deployments);
   }
 
-  if (zkEvmV2Address === undefined) {
-    zkEvmV2Address = await getDeployedContractAddress(zkEvmV2Name, deployments);
+  if (LineaRollupAddress === undefined) {
+    LineaRollupAddress = await getDeployedContractAddress(LineaRollupName, deployments);
   }
 
   if (existingContractAddress === undefined) {
@@ -43,7 +46,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     console.log(
       `TOKEN_BRIDGE_L1=${process.env.TOKEN_BRIDGE_L1}. Deploying TokenBridge on L1, using L1_RESERVED_TOKEN_ADDRESSES environment variable`,
     );
-    deployingChainMessageService = zkEvmV2Address;
+    deployingChainMessageService = LineaRollupAddress;
     reservedAddresses = process.env.L1_RESERVED_TOKEN_ADDRESSES
       ? process.env.L1_RESERVED_TOKEN_ADDRESSES.split(",")
       : [];

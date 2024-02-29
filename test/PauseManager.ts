@@ -45,7 +45,7 @@ describe("PauseManager", () => {
     // can pause as PAUSE_MANAGER_ROLE
     it("should pause the contract if PAUSE_MANAGER_ROLE", async () => {
       await pauseManager.connect(pauseManagerAccount).pauseByType(GENERAL_PAUSE_TYPE);
-      expect(await pauseManager.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.true;
+      expect(await pauseManager.isPaused(GENERAL_PAUSE_TYPE)).to.be.true;
     });
 
     // cannot pause as non-PAUSE_MANAGER_ROLE
@@ -59,7 +59,7 @@ describe("PauseManager", () => {
     it("should unpause the contract if PAUSE_MANAGER_ROLE", async () => {
       await pauseManager.connect(pauseManagerAccount).pauseByType(GENERAL_PAUSE_TYPE);
       await pauseManager.connect(pauseManagerAccount).unPauseByType(GENERAL_PAUSE_TYPE);
-      expect(await pauseManager.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.false;
+      expect(await pauseManager.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
     });
 
     // cannot unpause as non-PAUSE_MANAGER_ROLE
@@ -88,37 +88,45 @@ describe("PauseManager", () => {
 
   describe("Specific type pausing", () => {
     describe("With permissions as PAUSE_MANAGER_ROLE", () => {
+      it("should reject the pause tx if pause type value is greater than 255", async () => {
+        await expect(pauseManager.connect(pauseManagerAccount).pauseByType(257)).rejectedWith("value out-of-bounds");
+      });
+
+      it("should reject the unpause tx if pause type value is greater than 255", async () => {
+        await expect(pauseManager.connect(pauseManagerAccount).unPauseByType(257)).rejectedWith("value out-of-bounds");
+      });
+
       it("should pause the L1_L2_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(L1_L2_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(L1_L2_PAUSE_TYPE)).to.be.true;
+        expect(await pauseManager.isPaused(L1_L2_PAUSE_TYPE)).to.be.true;
       });
 
       it("should unpause the L1_L2_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(L1_L2_PAUSE_TYPE);
         await pauseManager.connect(pauseManagerAccount).unPauseByType(L1_L2_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(L1_L2_PAUSE_TYPE)).to.be.false;
+        expect(await pauseManager.isPaused(L1_L2_PAUSE_TYPE)).to.be.false;
       });
 
       it("should pause the L2_L1_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(L2_L1_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(L2_L1_PAUSE_TYPE)).to.be.true;
+        expect(await pauseManager.isPaused(L2_L1_PAUSE_TYPE)).to.be.true;
       });
 
       it("should unpause the L2_L1_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(L2_L1_PAUSE_TYPE);
         await pauseManager.connect(pauseManagerAccount).unPauseByType(L2_L1_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(L2_L1_PAUSE_TYPE)).to.be.false;
+        expect(await pauseManager.isPaused(L2_L1_PAUSE_TYPE)).to.be.false;
       });
 
       it("should pause the PROVING_SYSTEM_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(PROVING_SYSTEM_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(PROVING_SYSTEM_PAUSE_TYPE)).to.be.true;
+        expect(await pauseManager.isPaused(PROVING_SYSTEM_PAUSE_TYPE)).to.be.true;
       });
 
       it("should unpause the PROVING_SYSTEM_PAUSE_TYPE", async () => {
         await pauseManager.connect(pauseManagerAccount).pauseByType(PROVING_SYSTEM_PAUSE_TYPE);
         await pauseManager.connect(pauseManagerAccount).unPauseByType(PROVING_SYSTEM_PAUSE_TYPE);
-        expect(await pauseManager.pauseTypeStatuses(PROVING_SYSTEM_PAUSE_TYPE)).to.be.false;
+        expect(await pauseManager.isPaused(PROVING_SYSTEM_PAUSE_TYPE)).to.be.false;
       });
     });
 

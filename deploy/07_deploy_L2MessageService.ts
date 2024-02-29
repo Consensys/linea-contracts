@@ -3,9 +3,12 @@ import { DeployFunction } from "hardhat-deploy/types";
 import { deployUpgradableFromFactory, requireEnv } from "../scripts/hardhat/utils";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
+  validateDeployBranchAndTags(hre.network.name);
+
   const contractName = "L2MessageService";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
 
@@ -33,7 +36,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       unsafeAllow: ["constructor"],
     },
   );
-  console.log(`${contractName} deployed at ${contract.address}`);
+  const txReceipt = await contract.deployTransaction.wait(1);
+  console.log(`${contractName} deployed: address=${contract.address} blockNumber=${txReceipt.blockNumber}`);
 
   await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
 

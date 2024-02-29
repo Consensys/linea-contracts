@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity >=0.8.19 <=0.8.22;
 
 /**
  * @title Decoding functions for message service anchoring and bytes slicing.

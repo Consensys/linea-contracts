@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity 0.8.22;
 
 import { L1MessageService } from "../messageService/l1/L1MessageService.sol";
 
@@ -11,19 +11,33 @@ contract TestL1MessageService is L1MessageService {
     address _limitManagerAddress,
     address _pauserManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount
+    uint256 _rateLimitAmount,
+    uint256 _systemMigrationBlock
   ) public initializer {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    __MessageService_init(_limitManagerAddress, _pauserManagerAddress, _rateLimitPeriod, _rateLimitAmount);
+    __MessageService_init(
+      _limitManagerAddress,
+      _pauserManagerAddress,
+      _rateLimitPeriod,
+      _rateLimitAmount,
+      _systemMigrationBlock
+    );
   }
 
   function tryInitialize(
     address _limitManagerAddress,
     address _pauserManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount
+    uint256 _rateLimitAmount,
+    uint256 _systemMigrationBlock
   ) external {
-    __MessageService_init(_limitManagerAddress, _pauserManagerAddress, _rateLimitPeriod, _rateLimitAmount);
+    __MessageService_init(
+      _limitManagerAddress,
+      _pauserManagerAddress,
+      _rateLimitPeriod,
+      _rateLimitAmount,
+      _systemMigrationBlock
+    );
   }
 
   // @dev - the this. sendMessage is because the function is an "external" call and not wrapped
@@ -82,13 +96,17 @@ contract TestL1MessageService is L1MessageService {
     }
   }
 
+  function nonInitializedTest(uint256 _systemMigrationBlock) external {
+    __SystemMigrationBlock_init(_systemMigrationBlock);
+  }
+
+  function setSystemMigrationBlock(uint256 _systemMigrationBlock) external reinitializer(2) {
+    __SystemMigrationBlock_init(_systemMigrationBlock);
+  }
+
+  function resetSystemMigrationBlock(uint256 _systemMigrationBlock) external reinitializer(3) {
+    __SystemMigrationBlock_init(_systemMigrationBlock);
+  }
+
   function addFunds() external payable {}
-
-  fallback() external payable {
-    revert();
-  }
-
-  receive() external payable override {
-    revert();
-  }
 }

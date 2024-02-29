@@ -2,7 +2,7 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { BigNumber } from "ethers";
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 import { TestL2MessageService, TestReceivingContract } from "../typechain-types";
 import {
   BLOCK_COINBASE,
@@ -134,6 +134,25 @@ describe("L2MessageService", () => {
         ),
       ).to.be.revertedWith("Initializable: contract is already initialized");
     });
+
+    it("Can upgrade existing contract", async () => {
+      const contract = await deployUpgradableFromFactory("L2MessageServiceLineaMainnet", [
+        securityCouncil.address,
+        l1l2MessageSetter.address,
+        86400,
+        INITIAL_WITHDRAW_LIMIT,
+      ]);
+
+      const l2MessageServiceFactory = await ethers.getContractFactory("L2MessageService");
+      await upgrades.validateUpgrade(contract, l2MessageServiceFactory);
+
+      const newContract = await upgrades.upgradeProxy(contract, l2MessageServiceFactory);
+
+      const upgradedContract = await newContract.deployed();
+      await upgrades.validateImplementation(l2MessageServiceFactory);
+
+      expect(await upgradedContract.lastAnchoredL1MessageNumber()).to.equal(0);
+    });
   });
 
   describe("Send message", () => {
@@ -222,6 +241,17 @@ describe("L2MessageService", () => {
           });
 
         expect(await ethers.provider.getBalance(BLOCK_COINBASE)).to.be.gt(initialCoinbaseBalance.add(MINIMUM_FEE));
+      });
+
+      it("Should succeed if 'MinimumFeeChanged' event is emitted", async () => {
+        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE))
+          .to.emit(l2MessageService, "MinimumFeeChanged")
+          .withArgs(0, MINIMUM_FEE, securityCouncil.address);
+
+        // Testing non-zero transition
+        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE.add(1)))
+          .to.emit(l2MessageService, "MinimumFeeChanged")
+          .withArgs(MINIMUM_FEE, MINIMUM_FEE.add(1), securityCouncil.address);
       });
 
       it("Should succeed if 'MessageSent' event is emitted", async () => {
@@ -905,7 +935,7 @@ describe("L2MessageService", () => {
         expect(await notAuthorizedAccount.getBalance()).to.be.greaterThan(
           destinationBalance.add(MESSAGE_VALUE_1ETH).add(MESSAGE_VALUE_1ETH),
         );
-        expect(await admin.getBalance()).to.be.greaterThan(adminBalance);
+        expect(await admin.getBalance()).to.be.lessThan(adminBalance.add(MESSAGE_FEE));
 
         expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_CLAIMED,
@@ -1021,7 +1051,7 @@ describe("L2MessageService", () => {
         ).to.be.revertedWith("ReentrancyGuard: reentrant call");
       });
 
-      it("Should fail when the destination errors", async () => {
+      it("Should fail when the destination errors through receive", async () => {
         const expectedBytes = await encodeSendMessage(
           l2MessageService.address,
           l2MessageService.address,
@@ -1046,6 +1076,74 @@ describe("L2MessageService", () => {
               MESSAGE_VALUE_1ETH,
               ethers.constants.AddressZero,
               "0x",
+              1,
+            ),
+        ).to.be.reverted;
+
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+          INBOX_STATUS_RECEIVED,
+        );
+      });
+
+      it("Should fail when the destination errors through fallback", async () => {
+        const expectedBytes = await encodeSendMessage(
+          l2MessageService.address,
+          l2MessageService.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          BigNumber.from(1),
+          "0x1234",
+        );
+
+        await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
+
+        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
+        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+
+        await expect(
+          l2MessageService
+            .connect(admin)
+            .claimMessage(
+              l2MessageService.address,
+              l2MessageService.address,
+              MESSAGE_FEE,
+              MESSAGE_VALUE_1ETH,
+              ethers.constants.AddressZero,
+              "0x1234",
+              1,
+            ),
+        ).to.be.reverted;
+
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+          INBOX_STATUS_RECEIVED,
+        );
+      });
+
+      it("Should fail when the destination errors on empty receive (makeItReceive function)", async () => {
+        const expectedBytes = await encodeSendMessage(
+          l2MessageService.address,
+          l2MessageService.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          BigNumber.from(1),
+          "0xfc13b6f3",
+        );
+
+        await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
+
+        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
+        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+
+        await expect(
+          l2MessageService
+            .connect(admin)
+            .claimMessage(
+              l2MessageService.address,
+              l2MessageService.address,
+              MESSAGE_FEE,
+              MESSAGE_VALUE_1ETH,
+              ethers.constants.AddressZero,
+              "0xfc13b6f3",
               1,
             ),
         )
@@ -1114,21 +1212,21 @@ describe("L2MessageService", () => {
 
   describe("Pausing contracts", () => {
     it("Should fail pausing as non-pauser", async () => {
-      expect(await l2MessageService.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.false;
+      expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
 
       await expect(l2MessageService.connect(admin).pauseByType(GENERAL_PAUSE_TYPE)).to.be.revertedWith(
         "AccessControl: account " + admin.address.toLowerCase() + " is missing role " + PAUSE_MANAGER_ROLE,
       );
 
-      expect(await l2MessageService.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.false;
+      expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
     });
 
     it("Should pause as pause manager", async () => {
-      expect(await l2MessageService.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.false;
+      expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
 
       await l2MessageService.connect(securityCouncil).pauseByType(GENERAL_PAUSE_TYPE);
 
-      expect(await l2MessageService.pauseTypeStatuses(GENERAL_PAUSE_TYPE)).to.be.true;
+      expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.true;
     });
   });
 

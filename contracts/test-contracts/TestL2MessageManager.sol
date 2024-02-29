@@ -36,4 +36,8 @@ contract TestL2MessageManager is Initializable, L2MessageManager, IGenericErrors
   function updateL1L2MessageStatusToClaimed(bytes32 _messageHash) external {
     _updateL1L2MessageStatusToClaimed(_messageHash);
   }
+
+  function setLastAnchoredL1MessageNumber(uint256 _messageNumber) external {
+    lastAnchoredL1MessageNumber = _messageNumber;
+  }
 }
