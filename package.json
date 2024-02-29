@@ -24,7 +24,7 @@
   "devDependencies": {
     "@gnosis.pm/zodiac": "^3.3.2",
     "@nomicfoundation/hardhat-toolbox": "^2.0.2",
-    "@openzeppelin/contracts": "^4.9.3",
+    "@openzeppelin/contracts": "^4.9.6",
     "@openzeppelin/contracts-upgradeable": "^4.9.3",
     "@openzeppelin/hardhat-upgrades": "^1.28.0",
     "@types/diff": "^5.0.3",
