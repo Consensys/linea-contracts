@@ -1,6 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
+import { BridgedToken, UpgradedBridgedToken } from "../../typechain-types";
 
 const initialUserBalance = 10000;
 
@@ -11,27 +12,33 @@ async function createTokenBeaconProxy() {
 
   // Deploy token beacon
   const l1TokenBeacon = await upgrades.deployBeacon(BridgedToken);
-  await l1TokenBeacon.deployed();
+  await l1TokenBeacon.waitForDeployment();
 
   const l2TokenBeacon = await upgrades.deployBeacon(BridgedToken);
-  await l2TokenBeacon.deployed();
+  await l2TokenBeacon.waitForDeployment();
 
   // Create tokens
-  const abcToken = await upgrades.deployBeaconProxy(l1TokenBeacon.address, BridgedToken, ["AbcToken", "ABC", 18]);
+  const abcToken = (await upgrades.deployBeaconProxy(await l1TokenBeacon.getAddress(), BridgedToken, [
+    "AbcToken",
+    "ABC",
+    18,
+  ])) as unknown as BridgedToken;
 
-  const sixDecimalsToken = await upgrades.deployBeaconProxy(l1TokenBeacon.address, BridgedToken, [
+  const sixDecimalsToken = (await upgrades.deployBeaconProxy(await l1TokenBeacon.getAddress(), BridgedToken, [
     "sixDecimalsToken",
     "SIX",
     6,
-  ]);
+  ])) as unknown as BridgedToken;
 
   // Create a new token implementation
   const UpgradedBridgedToken = await ethers.getContractFactory("UpgradedBridgedToken");
   const newImplementation = await UpgradedBridgedToken.deploy();
-  await newImplementation.deployed();
+  await newImplementation.waitForDeployment();
 
   // Update l2TokenBeacon with new implementation
-  await l2TokenBeacon.connect(admin).upgradeTo(newImplementation.address);
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore
+  await l2TokenBeacon.connect(admin).upgradeTo(newImplementation.getAddress());
 
   // Set initial balance
   await sixDecimalsToken.connect(admin).mint(unknown.address, initialUserBalance);
@@ -51,8 +58,8 @@ async function createTokenBeaconProxy() {
 describe("BridgedToken", function () {
   it("Should deploy BridgedToken", async function () {
     const { abcToken, sixDecimalsToken } = await loadFixture(createTokenBeaconProxy);
-    expect(abcToken.address).to.be.not.null;
-    expect(sixDecimalsToken.address).to.be.not.null;
+    expect(await abcToken.getAddress()).to.be.not.null;
+    expect(await sixDecimalsToken.getAddress()).to.be.not.null;
   });
 
   it("Should set the right metadata", async function () {
@@ -96,27 +103,36 @@ describe("BridgedToken", function () {
 
 describe("BeaconProxy", function () {
   it("Should enable upgrade of existing beacon proxy", async function () {
-    const { admin, l1TokenBeacon, abcToken, newImplementation, UpgradedBridgedToken } = await loadFixture(
-      createTokenBeaconProxy,
-    );
-    await l1TokenBeacon.connect(admin).upgradeTo(newImplementation.address);
-    expect(await l1TokenBeacon.implementation()).to.be.equal(newImplementation.address);
-    expect(await UpgradedBridgedToken.attach(abcToken.address).isUpgraded()).to.be.equal(true);
+    const { admin, l1TokenBeacon, abcToken, newImplementation, UpgradedBridgedToken } =
+      await loadFixture(createTokenBeaconProxy);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await l1TokenBeacon.connect(admin).upgradeTo(await newImplementation.getAddress());
+    expect(await l1TokenBeacon.implementation()).to.be.equal(await newImplementation.getAddress());
+    expect(
+      await (UpgradedBridgedToken.attach(await abcToken.getAddress()) as UpgradedBridgedToken).isUpgraded(),
+    ).to.be.equal(true);
   });
 
   it("Should deploy new beacon proxy with the updated implementation", async function () {
     const { l2TokenBeacon, UpgradedBridgedToken } = await loadFixture(createTokenBeaconProxy);
-    const newTokenBeaconProxy = await upgrades.deployBeaconProxy(l2TokenBeacon.address, UpgradedBridgedToken, [
-      "NAME",
-      "SYMBOL",
-      18, // Decimals
-    ]);
+    const newTokenBeaconProxy = await upgrades.deployBeaconProxy(
+      await l2TokenBeacon.getAddress(),
+      UpgradedBridgedToken,
+      [
+        "NAME",
+        "SYMBOL",
+        18, // Decimals
+      ],
+    );
     expect(await newTokenBeaconProxy.isUpgraded()).to.be.equal(true);
   });
 
   it("Beacon upgrade should only be done by the owner", async function () {
     const { unknown, l1TokenBeacon, newImplementation } = await loadFixture(createTokenBeaconProxy);
-    await expect(l1TokenBeacon.connect(unknown).upgradeTo(newImplementation.address)).to.be.revertedWith(
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    await expect(l1TokenBeacon.connect(unknown).upgradeTo(await newImplementation.getAddress())).to.be.revertedWith(
       "Ownable: caller is not the owner",
     );
   });

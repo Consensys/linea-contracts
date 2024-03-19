@@ -1,5 +1,3 @@
-import { BigNumber } from "ethers";
-
 export type RawBlockData = {
   rootHash: string;
   timestamp: number;
@@ -39,9 +37,17 @@ export type SubmissionData = {
   parentStateRootHash: string;
   dataParentHash: string;
   finalStateRootHash: string;
-  firstBlockInData: BigNumber;
-  finalBlockInData: BigNumber;
+  firstBlockInData: bigint;
+  finalBlockInData: bigint;
   snarkHash: string;
+};
+
+export type CalldataSubmissionData = SubmissionData & {
+  compressedData: string;
+};
+
+export type SubmissionAndCompressedData = {
+  submissionData: SubmissionData;
   compressedData: string;
 };
 
@@ -50,12 +56,12 @@ export type FinalizationData = {
   parentStateRootHash: string;
   dataHashes: string[];
   dataParentHash: string;
-  finalBlockNumber: BigNumber;
-  lastFinalizedTimestamp: BigNumber;
-  finalTimestamp: BigNumber;
+  finalBlockNumber: bigint;
+  lastFinalizedTimestamp: bigint;
+  finalTimestamp: bigint;
   l1RollingHash: string;
-  l1RollingHashMessageNumber: BigNumber;
+  l1RollingHashMessageNumber: bigint;
   l2MerkleRoots: string[];
-  l2MerkleTreesDepth: BigNumber;
+  l2MerkleTreesDepth: bigint;
   l2MessagingBlocksOffsets: string;
 };

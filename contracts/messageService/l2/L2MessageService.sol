@@ -11,6 +11,7 @@ import { L2MessageManager } from "./L2MessageManager.sol";
  * @custom:security-contact security-report@linea.build
  */
 contract L2MessageService is AccessControlUpgradeable, L2MessageServiceV1, L2MessageManager {
-  // Keep free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Total contract storage is 50 slots with the gap below.
+  /// @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
   uint256[50] private __gap_L2MessageService;
 }

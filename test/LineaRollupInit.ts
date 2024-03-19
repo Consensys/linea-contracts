@@ -1,13 +1,13 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TestLineaRollup, LineaRollupInit__factory } from "../typechain-types";
-import { INITIAL_WITHDRAW_LIMIT, ONE_DAY_IN_SECONDS, VERY_HIGH_MIGRATION_BLOCK } from "./utils/constants";
+import { GENESIS_L2_TIMESTAMP, INITIAL_WITHDRAW_LIMIT, ONE_DAY_IN_SECONDS } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
-import { getProverTestData } from "./utils/helpers";
+import { generateRandomBytes } from "./utils/helpers";
 
-describe("ZK EVM Init contract", () => {
+describe("LineaRollup Init contract", () => {
   let LineaRollup: TestLineaRollup;
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -16,14 +16,16 @@ describe("ZK EVM Init contract", () => {
   let securityCouncil: SignerWithAddress;
   let operator: SignerWithAddress;
 
-  const { parentStateRootHash, firstBlockNumber } = getProverTestData("Light", "output-file.json");
+  const parentStateRootHash = generateRandomBytes(32);
+
+  const firstBlockNumber = 199;
 
   async function deployLineaRollupFixture() {
     const PlonkVerifierFactory = await ethers.getContractFactory("PlonkVerifier");
     const plonkVerifier = await PlonkVerifierFactory.deploy();
-    await plonkVerifier.deployed();
+    await plonkVerifier.waitForDeployment();
 
-    verifier = plonkVerifier.address;
+    verifier = await plonkVerifier.getAddress();
 
     const LineaRollup = (await deployUpgradableFromFactory(
       "TestLineaRollup",
@@ -35,13 +37,13 @@ describe("ZK EVM Init contract", () => {
         [operator.address],
         ONE_DAY_IN_SECONDS,
         INITIAL_WITHDRAW_LIMIT,
-        VERY_HIGH_MIGRATION_BLOCK,
+        GENESIS_L2_TIMESTAMP,
       ],
       {
         initializer: "initialize(bytes32,uint256,address,address,address[],uint256,uint256,uint256)",
         unsafeAllow: ["constructor"],
       },
-    )) as TestLineaRollup;
+    )) as unknown as TestLineaRollup;
 
     return { LineaRollup };
   }
@@ -59,7 +61,7 @@ describe("ZK EVM Init contract", () => {
     LineaRollupInit__factory.createInterface();
 
     it("Should set the initial block number", async () => {
-      const l2block = ethers.BigNumber.from(12121);
+      const l2block = 12121n;
       const l2BlockNumber = await LineaRollup.currentL2BlockNumber();
       const lineaRollupContract = await deployUpgradableFromFactory("LineaRollupInit", [l2block, parentStateRootHash], {
         initializer: "initializeV2(uint256,bytes32)",
@@ -76,7 +78,7 @@ describe("ZK EVM Init contract", () => {
     });
 
     it("Cannot initialize twice", async () => {
-      const l2block = ethers.BigNumber.from(12121);
+      const l2block = 12121n;
       const l2BlockNumber = await LineaRollup.currentL2BlockNumber();
       const lineaRollupContract = await deployUpgradableFromFactory("LineaRollupInit", [l2block, parentStateRootHash], {
         initializer: "initializeV2(uint256,bytes32)",

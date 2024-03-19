@@ -1,11 +1,11 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { DeployFunction } from "hardhat-deploy/types";
-import { deployFromFactory, requireEnv } from "../scripts/hardhat/utils";
-import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
-import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
 import { ethers } from "hardhat";
+import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { deployFromFactory, requireEnv } from "../scripts/hardhat/utils";
 import { get1559Fees } from "../scripts/utils";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
+import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
+import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -23,14 +23,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     console.log(`Deploying new version, NB: ${existingContractAddress} will be overwritten if env SAVE_ADDRESS=true.`);
   }
   const contract = await deployFromFactory(contractName, provider, adminAddress, await get1559Fees(provider));
+  const contractAddress = await contract.getAddress();
 
-  console.log(`${contractName} deployed at ${contract.address}`);
+  console.log(`${contractName} deployed at ${contractAddress}`);
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  const deployTx = contract.deploymentTransaction();
+  if (!deployTx) {
+    throw "Contract deployment transaction receipt not found.";
+  }
+
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, deployTx.hash);
 
   const args = [adminAddress];
 
-  await tryVerifyContractWithConstructorArgs(contract.address, "contracts/token/LineaVoyageXP.sol:LineaVoyageXP", args);
+  await tryVerifyContractWithConstructorArgs(contractAddress, "contracts/token/LineaVoyageXP.sol:LineaVoyageXP", args);
 };
 export default func;
 func.tags = ["LineaVoyageXPToken"];

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity >=0.8.19 <=0.8.22;
+pragma solidity >=0.8.19 <=0.8.24;
 
 /**
  * @title Interface declaring pre-existing cross-chain messaging functions, events and errors.
@@ -8,8 +8,17 @@ pragma solidity >=0.8.19 <=0.8.22;
  */
 interface IMessageService {
   /**
-   * @dev Emitted when a message is sent.
+   * @notice Emitted when a message is sent.
+   * @param _from The indexed sender address of the message (msg.sender).
+   * @param _to The indexed intended recipient address of the message on the other layer.
+   * @param _fee The fee being being paid to deliver the message to the recipient in Wei.
+   * @param _value The value being sent to the recipient in Wei.
+   * @param _nonce The unique message number.
+   * @param _calldata The calldata being passed to the intended recipient when being called on claiming.
+   * @param _messageHash The indexed hash of the message parameters.
+   * @dev _calldata has the _ because calldata is a reserved word.
    * @dev We include the message hash to save hashing costs on the rollup.
+   * @dev This event is used on both L1 and L2.
    */
   event MessageSent(
     address indexed _from,
@@ -22,7 +31,8 @@ interface IMessageService {
   );
 
   /**
-   * @dev Emitted when a message is claimed.
+   * @notice Emitted when a message is claimed.
+   * @param _messageHash The indexed hash of the message that was claimed.
    */
   event MessageClaimed(bytes32 indexed _messageHash);
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { LineaRollup } from "../LineaRollup.sol";
 
@@ -42,5 +42,9 @@ contract TestLineaRollup is LineaRollup {
 
   function setupStartingBlockForDataHash(bytes32 _dataHash, uint256 _blockNumber) external {
     dataStartingBlock[_dataHash] = _blockNumber;
+  }
+
+  function setLastFinalizedShnarf(bytes32 _lastFinalizedShnarf) external {
+    currentFinalizedShnarf = _lastFinalizedShnarf;
   }
 }

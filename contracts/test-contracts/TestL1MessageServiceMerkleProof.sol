@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { L1MessageService } from "../messageService/l1/L1MessageService.sol";
 import { IL1MessageService } from "../interfaces/l1/IL1MessageService.sol";
@@ -16,33 +16,19 @@ contract TestL1MessageServiceMerkleProof is L1MessageService {
     address _limitManagerAddress,
     address _pauserManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount,
-    uint256 _systemMigrationBlock
+    uint256 _rateLimitAmount
   ) public initializer {
     _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-    __MessageService_init(
-      _limitManagerAddress,
-      _pauserManagerAddress,
-      _rateLimitPeriod,
-      _rateLimitAmount,
-      _systemMigrationBlock
-    );
+    __MessageService_init(_limitManagerAddress, _pauserManagerAddress, _rateLimitPeriod, _rateLimitAmount);
   }
 
   function tryInitialize(
     address _limitManagerAddress,
     address _pauserManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount,
-    uint256 _systemMigrationBlock
+    uint256 _rateLimitAmount
   ) external {
-    __MessageService_init(
-      _limitManagerAddress,
-      _pauserManagerAddress,
-      _rateLimitPeriod,
-      _rateLimitAmount,
-      _systemMigrationBlock
-    );
+    __MessageService_init(_limitManagerAddress, _pauserManagerAddress, _rateLimitPeriod, _rateLimitAmount);
   }
 
   // @dev - the this. sendMessage is because the function is an "external" call and not wrapped
@@ -51,7 +37,11 @@ contract TestL1MessageServiceMerkleProof is L1MessageService {
   }
 
   function addL2L1MessageHash(bytes32 _messageHash) external {
-    _addL2L1MessageHash(_messageHash);
+    if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_UNKNOWN) {
+      revert MessageAlreadyReceived(_messageHash);
+    }
+
+    inboxL2L1MessageStatus[_messageHash] = INBOX_STATUS_RECEIVED;
   }
 
   function setSender() external payable {

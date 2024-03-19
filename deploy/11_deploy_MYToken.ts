@@ -1,10 +1,10 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { ethers } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployFromFactory, requireEnv } from "../scripts/hardhat/utils";
+import { get1559Fees } from "../scripts/utils";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
-import { ethers } from "hardhat";
-import { get1559Fees } from "../scripts/utils";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -21,13 +21,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
   const contract = await deployFromFactory(contractName, provider, adminAddress, await get1559Fees(provider));
 
-  console.log(`${contractName} deployed at ${contract.address}`);
+  const contractAddress = await contract.getAddress();
+  console.log(`${contractName} deployed at ${contractAddress}`);
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  const deployTx = contract.deploymentTransaction();
+  if (!deployTx) {
+    throw "Contract deployment transaction receipt not found.";
+  }
+
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, deployTx.hash);
 
   const args = [adminAddress];
 
-  await tryVerifyContractWithConstructorArgs(contract.address, "contracts/token/MyToken.sol:MyToken", args);
+  await tryVerifyContractWithConstructorArgs(contractAddress, "contracts/token/MyToken.sol:MyToken", args);
 };
 export default func;
 func.tags = ["MYToken"];

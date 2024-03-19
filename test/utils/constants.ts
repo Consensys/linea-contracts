@@ -1,8 +1,8 @@
 import { ethers } from "hardhat";
 import { generateKeccak256 } from "./helpers";
 
-export const HASH_ZERO = ethers.constants.HashZero;
-export const ADDRESS_ZERO = ethers.constants.AddressZero;
+export const HASH_ZERO = ethers.ZeroHash;
+export const ADDRESS_ZERO = ethers.ZeroAddress;
 export const HASH_WITHOUT_ZERO_FIRST_BYTE = "0xf887bbc07b0e849fb625aafadf4cb6b65b98e492fbb689705312bf1db98ead7f";
 
 // Linea XP Token roles
@@ -42,16 +42,16 @@ export const OUTBOX_STATUS_RECEIVED = 2;
 
 export const INITIAL_MIGRATION_BLOCK = 0;
 export const ONE_DAY_IN_SECONDS = 86_400;
-export const INITIAL_WITHDRAW_LIMIT = ethers.utils.parseEther("5");
-export const VERY_HIGH_MIGRATION_BLOCK = ethers.BigNumber.from(1_000_000);
-export const TEST_PUBLIC_VERIFIER_INDEX = ethers.BigNumber.from(0);
+export const INITIAL_WITHDRAW_LIMIT = ethers.parseEther("5");
+export const GENESIS_L2_TIMESTAMP = 0;
+export const TEST_PUBLIC_VERIFIER_INDEX = 0;
 
-export const MESSAGE_VALUE_1ETH = ethers.utils.parseEther("1");
+export const MESSAGE_VALUE_1ETH = ethers.parseEther("1");
 export const ZERO_VALUE = 0;
-export const MESSAGE_FEE = ethers.utils.parseEther("0.05");
-export const LOW_NO_REFUND_MESSAGE_FEE = ethers.utils.parseEther("0.00001");
-export const MINIMUM_FEE = ethers.utils.parseEther("0.1");
-export const DEFAULT_MESSAGE_NONCE = ethers.utils.parseEther("123456789");
+export const MESSAGE_FEE = ethers.parseEther("0.05");
+export const LOW_NO_REFUND_MESSAGE_FEE = ethers.parseEther("0.00001");
+export const MINIMUM_FEE = ethers.parseEther("0.1");
+export const DEFAULT_MESSAGE_NONCE = ethers.parseEther("123456789");
 export const SAMPLE_FUNCTION_CALLDATA = generateKeccak256(["string"], ["callThisFunction()"], true).substring(0, 10); //0x + 4bytes
 export const EMPTY_CALLDATA = "0x";
 export const BLOCK_COINBASE = "0xc014ba5ec014ba5ec014ba5ec014ba5ec014ba5e";
@@ -59,8 +59,8 @@ export const BLOCK_COINBASE = "0xc014ba5ec014ba5ec014ba5ec014ba5ec014ba5e";
 export const DEFAULT_SUBMISSION_DATA = {
   dataParentHash: HASH_ZERO,
   compressedData: "0x",
-  finalBlockInData: ethers.BigNumber.from(0),
-  firstBlockInData: ethers.BigNumber.from(0),
+  finalBlockInData: 0n,
+  firstBlockInData: 0n,
   parentStateRootHash: HASH_ZERO,
   finalStateRootHash: HASH_ZERO,
   snarkHash: HASH_ZERO,

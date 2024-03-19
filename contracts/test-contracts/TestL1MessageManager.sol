@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { L1MessageManager } from "../messageService/l1/L1MessageManager.sol";
 
 contract TestL1MessageManager is L1MessageManager {
   ///@dev V1
   function addL2L1MessageHash(bytes32 _messageHash) external {
-    _addL2L1MessageHash(_messageHash);
+    if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_UNKNOWN) {
+      revert MessageAlreadyReceived(_messageHash);
+    }
+
+    inboxL2L1MessageStatus[_messageHash] = INBOX_STATUS_RECEIVED;
   }
 
   function updateL2L1MessageStatusToClaimed(bytes32 _messageHash) external {
@@ -14,11 +18,24 @@ contract TestL1MessageManager is L1MessageManager {
   }
 
   function addL1L2MessageHash(bytes32 _messageHash) external {
-    _addL1L2MessageHash(_messageHash);
+    outboxL1L2MessageStatus[_messageHash] = OUTBOX_STATUS_SENT;
   }
 
   function updateL1L2MessageStatusToReceived(bytes32[] calldata _messageHashes) external {
-    _updateL1L2MessageStatusToReceived(_messageHashes);
+    uint256 messageHashArrayLength = _messageHashes.length;
+
+    for (uint256 i; i < messageHashArrayLength; ++i) {
+      bytes32 messageHash = _messageHashes[i];
+      uint256 existingStatus = outboxL1L2MessageStatus[messageHash];
+
+      if (existingStatus == OUTBOX_STATUS_UNKNOWN) {
+        revert L1L2MessageNotSent(messageHash);
+      }
+
+      if (existingStatus != OUTBOX_STATUS_RECEIVED) {
+        outboxL1L2MessageStatus[messageHash] = OUTBOX_STATUS_RECEIVED;
+      }
+    }
   }
 
   ///@dev V2

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
 import fs from "fs";
-import path from "path";
 import { ethers } from "hardhat";
 import { DeploymentsExtension } from "hardhat-deploy/types";
+import path from "path";
 const editJsonFile = require("edit-json-file");
 
 export const tryStoreAddress = async (
@@ -32,7 +32,7 @@ export const tryStoreAddress = async (
       JSON.stringify(
         {
           address: address,
-          abi: ContractFactory.interface.format(ethers.utils.FormatTypes.json),
+          abi: ContractFactory.interface.formatJson(),
           transactionHash: transactionHash,
         },
         null,

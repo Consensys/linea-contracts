@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 /**
  * @title L1 Message manager interface for current functions, events and errors.
@@ -8,17 +8,25 @@ pragma solidity 0.8.22;
  */
 interface IL1MessageManager {
   /**
-   * @dev Emitted when a new message is sent and the rolling hash updated.
+   * @notice Emitted when a new message is sent and the rolling hash updated.
+   * @param messageNumber The unique indexed message number for the message.
+   * @param rollingHash The indexed rolling hash computed for the current message number.
+   * @param messageHash The indexed hash of the message parameters.
    */
   event RollingHashUpdated(uint256 indexed messageNumber, bytes32 indexed rollingHash, bytes32 indexed messageHash);
 
   /**
-   * @dev Emitted when the l2 merkle root has been anchored on L1.
+   * @notice Emitted when the L2 merkle root has been anchored on L1.
+   * @param l2MerkleRoot The indexed L2 Merkle root that has been anchored on L1 Ethereum.
+   * @param treeDepth The indexed tree depth of the Merkle root.
+   * @dev There may be more than one of these in a finalization depending on the amount of L2->L1 messages in the finalization.
    */
   event L2MerkleRootAdded(bytes32 indexed l2MerkleRoot, uint256 indexed treeDepth);
 
   /**
-   * @dev Emitted when the l2 block contains L2 messages during finalization
+   * @notice Emitted when the l2 block contains L2 messages during finalization.
+   * @param l2Block The indexed L2 block containing L2 to L1 messages.
+   * @dev This is used externally in the logic for determining which messages belong to which Merkle root when claiming.
    */
   event L2MessagingBlockAnchored(uint256 indexed l2Block);
 

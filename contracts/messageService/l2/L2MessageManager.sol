@@ -17,37 +17,9 @@ abstract contract L2MessageManager is AccessControlUpgradeable, IL2MessageManage
   uint256 public lastAnchoredL1MessageNumber;
   mapping(uint256 messageNumber => bytes32 rollingHash) public l1RollingHashes;
 
-  // Keep free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Total contract storage is 52 slots including the gap below.
+  /// @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
   uint256[50] private __gap_L2MessageManager;
-
-  /**
-   * @notice Add cross-chain L1->L2 message hashes in storage.
-   * @dev Only address that has the role 'L1_L2_MESSAGE_SETTER_ROLE' are allowed to call this function.
-   * @dev This is remaining for backwards compatibility.
-   * @param _messageHashes Message hashes array.
-   */
-  function addL1L2MessageHashes(
-    bytes32[] calldata _messageHashes
-  ) external whenTypeNotPaused(GENERAL_PAUSE_TYPE) onlyRole(L1_L2_MESSAGE_SETTER_ROLE) {
-    if (lastAnchoredL1MessageNumber > 0) {
-      revert ServiceHasMigratedToRollingHashes();
-    }
-
-    uint256 messageHashesLength = _messageHashes.length;
-
-    if (messageHashesLength > 100) {
-      revert MessageHashesListLengthHigherThanOneHundred(messageHashesLength);
-    }
-
-    for (uint256 i; i < messageHashesLength; ++i) {
-      bytes32 messageHash = _messageHashes[i];
-      if (inboxL1L2MessageStatus[messageHash] == INBOX_STATUS_UNKNOWN) {
-        inboxL1L2MessageStatus[messageHash] = INBOX_STATUS_RECEIVED;
-      }
-    }
-
-    emit L1L2MessageHashesAddedToInbox(_messageHashes);
-  }
 
   /**
    * @notice Add cross-chain L1->L2 message hashes in storage.
@@ -78,13 +50,8 @@ abstract contract L2MessageManager is AccessControlUpgradeable, IL2MessageManage
 
     uint256 currentL1MessageNumber = lastAnchoredL1MessageNumber;
 
-    if (currentL1MessageNumber == 0) {
-      currentL1MessageNumber = _startingMessageNumber - 1;
-      emit ServiceVersionMigrated(2);
-    } else {
-      if (_startingMessageNumber - 1 != currentL1MessageNumber) {
-        revert L1MessageNumberSynchronizationWrong(_startingMessageNumber - 1, currentL1MessageNumber);
-      }
+    if (_startingMessageNumber - 1 != currentL1MessageNumber) {
+      revert L1MessageNumberSynchronizationWrong(_startingMessageNumber - 1, currentL1MessageNumber);
     }
 
     bytes32 rollingHash = l1RollingHashes[currentL1MessageNumber];

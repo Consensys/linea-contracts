@@ -8,11 +8,16 @@ pragma solidity 0.8.19;
  */
 interface IL2MessageManagerV1 {
   /**
-   * @dev Emitted when L2 minimum fee is changed.
+   * @notice Emitted when L2 minimum fee is changed.
+   * @param previousMinimumFee The previous minimum fee in Wei.
+   * @param newMinimumFee The new minimum fee in Wei.
+   * @param calledBy The indexed address who changed the minimum fee.
    */
   event MinimumFeeChanged(uint256 previousMinimumFee, uint256 newMinimumFee, address indexed calledBy);
+
   /**
-   * @dev Emitted when L1->L2 message hashes have been added to L2 storage.
+   * @notice Emitted when L1->L2 message hashes have been added to L2 storage.
+   * @param messageHashes The message hashes that were added to L2 for claiming.
    */
   event L1L2MessageHashesAddedToInbox(bytes32[] messageHashes);
 

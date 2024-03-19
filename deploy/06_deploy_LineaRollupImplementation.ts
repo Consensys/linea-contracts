@@ -1,10 +1,10 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { DeployFunction } from "hardhat-deploy/types";
-import { requireEnv } from "../scripts/hardhat/utils";
-import { getDeployedContractAddress } from "../utils/storeAddress";
 import { ethers, upgrades } from "hardhat";
-import { tryVerifyContract } from "../utils/verifyContract";
+import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { requireEnv } from "../scripts/hardhat/utils";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
+import { getDeployedContractAddress } from "../utils/storeAddress";
+import { tryVerifyContract } from "../utils/verifyContract";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -32,9 +32,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   console.log(`Contract deployed at ${contract}`);
 
-  const upgradeCallUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallUsingSecurityCouncil = ethers.concat([
     "0x99a88ec4",
-    ethers.utils.defaultAbiCoder.encode(["address", "address"], [proxyAddress, newContract]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["address", "address"], [proxyAddress, newContract]),
   ]);
 
   console.log("Encoded Tx Upgrade from Security Council:", "\n", upgradeCallUsingSecurityCouncil);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { IL1MessageManagerV1 } from "../../../interfaces/l1/IL1MessageManagerV1.sol";
 
@@ -31,20 +31,7 @@ abstract contract L1MessageManagerV1 is IL1MessageManagerV1 {
   // NB: DO NOT USE THIS GAP
   // *******************************************************************************************
 
-  /**
-   * @notice Add cross-chain L2->L1 message hash in storage.
-   * @dev Once the event is emitted, it should be ready for claiming (post block finalization).
-   * @param  _messageHash Hash of the message.
-   */
-  function _addL2L1MessageHash(bytes32 _messageHash) internal {
-    if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_UNKNOWN) {
-      revert MessageAlreadyReceived(_messageHash);
-    }
-
-    inboxL2L1MessageStatus[_messageHash] = INBOX_STATUS_RECEIVED;
-
-    emit L2L1MessageHashAddedToInbox(_messageHash);
-  }
+  /// @dev Total contract storage is 2 slots.
 
   /**
    * @notice Update the status of L2->L1 message when a user claims a message on L1.
@@ -58,37 +45,5 @@ abstract contract L1MessageManagerV1 is IL1MessageManagerV1 {
     }
 
     delete inboxL2L1MessageStatus[_messageHash];
-  }
-
-  /**
-   * @notice Add L1->L2 message hash in storage when a message is sent on L1.
-   * @param  _messageHash Hash of the message.
-   */
-  function _addL1L2MessageHash(bytes32 _messageHash) internal {
-    outboxL1L2MessageStatus[_messageHash] = OUTBOX_STATUS_SENT;
-  }
-
-  /**
-   * @notice Update the status of L1->L2 messages as received when messages have been stored on L2.
-   * @dev The expectation here is that the rollup is limited to 100 hashes being added here - array is not open ended.
-   * @param  _messageHashes List of message hashes.
-   */
-  function _updateL1L2MessageStatusToReceived(bytes32[] memory _messageHashes) internal {
-    uint256 messageHashArrayLength = _messageHashes.length;
-
-    for (uint256 i; i < messageHashArrayLength; ++i) {
-      bytes32 messageHash = _messageHashes[i];
-      uint256 existingStatus = outboxL1L2MessageStatus[messageHash];
-
-      if (existingStatus == OUTBOX_STATUS_UNKNOWN) {
-        revert L1L2MessageNotSent(messageHash);
-      }
-
-      if (existingStatus != OUTBOX_STATUS_RECEIVED) {
-        outboxL1L2MessageStatus[messageHash] = OUTBOX_STATUS_RECEIVED;
-      }
-    }
-
-    emit L1L2MessagesReceivedOnL2(_messageHashes);
   }
 }

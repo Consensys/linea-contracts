@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.19;
 
+/**
+ * @title Interface declaring Canonical Token Bridge functions, events and errors.
+ * @author ConsenSys Software Inc.
+ * @custom:security-contact security-report@linea.build
+ */
 interface ITokenBridge {
   event TokenReserved(address indexed token);
   event CustomContractSet(address indexed nativeToken, address indexed customContract, address indexed setBy);
-  event BridgingInitiated(address indexed sender, address recipient, address indexed token, uint256 indexed amount);
+  event BridgingInitiated(address indexed sender, address indexed recipient, address indexed token, uint256 amount);
   event BridgingFinalized(
     address indexed nativeToken,
     address indexed bridgedToken,
-    uint256 indexed amount,
-    address recipient
+    uint256 amount,
+    address indexed recipient
   );
   event NewToken(address indexed token);
   event NewTokenDeployed(address indexed bridgedToken, address indexed nativeToken);

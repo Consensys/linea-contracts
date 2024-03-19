@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity >=0.8.19 <=0.8.22;
+pragma solidity >=0.8.19 <=0.8.24;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -17,14 +17,16 @@ contract RateLimiter is Initializable, IRateLimiter, AccessControlUpgradeable {
   uint256 public periodInSeconds; // how much time before limit resets.
   uint256 public limitInWei; // max ether to withdraw per period.
 
-  // @dev Public for ease of consumption.
-  // @notice The time at which the current period ends at.
+  /// @dev Public for ease of consumption.
+  /// @notice The time at which the current period ends at.
   uint256 public currentPeriodEnd;
 
-  // @dev Public for ease of consumption.
-  // @notice Amounts already withdrawn this period.
+  /// @dev Public for ease of consumption.
+  /// @notice Amounts already withdrawn this period.
   uint256 public currentPeriodAmountInWei;
 
+  /// @dev Total contract storage is 14 slots with the gap below.
+  /// @dev Keep 10 free storage slots for future implementation updates to avoid storage collision.
   uint256[10] private __gap;
 
   /**

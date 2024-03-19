@@ -5,7 +5,7 @@ import { FactoryOptions } from "hardhat/types";
 async function deployFromFactory(contractName: string, ...args: unknown[]) {
   const factory = await ethers.getContractFactory(contractName);
   const contract = await factory.deploy(...args);
-  await contract.deployed();
+  await contract.waitForDeployment();
   return contract;
 }
 
@@ -17,7 +17,7 @@ async function deployUpgradableFromFactory(
 ) {
   const factory = await ethers.getContractFactory(contractName, factoryOpts);
   const contract = await upgrades.deployProxy(factory, args, opts);
-  await contract.deployed();
+  await contract.waitForDeployment();
   return contract;
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 /**
  * @title Library to verify sparse merkle proofs and to get the leaf hash value

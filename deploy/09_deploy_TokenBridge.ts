@@ -1,9 +1,10 @@
-import { ethers, upgrades, network } from "hardhat";
-import { getDeployedContractAddress, tryStoreAddress, tryStoreProxyAdminAddress } from "../utils/storeAddress";
-import { tryVerifyContract } from "../utils/verifyContract";
+import { ethers, network, upgrades } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
+import { getDeployedContractAddress, tryStoreAddress, tryStoreProxyAdminAddress } from "../utils/storeAddress";
+import { tryVerifyContract } from "../utils/verifyContract";
+import { requireEnv } from "../scripts/hardhat/utils";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -16,10 +17,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const LineaRollupName = "LineaRollup";
   let l2MessageServiceAddress = process.env.L2_MESSAGE_SERVICE_ADDRESS;
   let LineaRollupAddress = process.env.LINEA_ROLLUP_ADDRESS;
-  const remoteChainId = process.env.REMOTE_CHAIN_ID;
+  const remoteChainId = requireEnv("REMOTE_CHAIN_ID");
 
   const [owner] = await ethers.getSigners();
-  const chainId = await owner.getChainId();
+  const chainId = (await ethers.provider.getNetwork()).chainId;
 
   console.log(`Current network's chainId is ${chainId}. Remote (target) network's chainId is ${remoteChainId}`);
 
@@ -76,17 +77,23 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     remoteChainId,
     reservedAddresses,
   ]);
-  await tokenBridge.deployed();
+  await tokenBridge.waitForDeployment();
+  const tokenBridgeAddress = await tokenBridge.getAddress();
 
-  await tryStoreAddress(network.name, contractName, tokenBridge.address, tokenBridge.deployTransaction.hash);
+  const deployTx = tokenBridge.deploymentTransaction();
+  if (!deployTx) {
+    throw "Contract deployment transaction receipt not found.";
+  }
 
-  const proxyAdmin = await upgrades.admin.getInstance();
+  await tryStoreAddress(network.name, contractName, tokenBridgeAddress, deployTx.hash);
 
-  await tryStoreProxyAdminAddress(network.name, contractName, proxyAdmin.address);
+  const proxyAdminAddress = await upgrades.erc1967.getAdminAddress(tokenBridgeAddress);
 
-  console.log(`TokenBridge deployed on ${network.name}, at address: ${tokenBridge.address}`);
+  await tryStoreProxyAdminAddress(network.name, contractName, proxyAdminAddress);
 
-  await tryVerifyContract(tokenBridge.address);
+  console.log(`TokenBridge deployed on ${network.name}, at address: ${tokenBridgeAddress}`);
+
+  await tryVerifyContract(tokenBridgeAddress);
 };
 export default func;
 func.tags = ["TokenBridge"];

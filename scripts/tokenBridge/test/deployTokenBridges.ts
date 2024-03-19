@@ -1,7 +1,8 @@
 import { ethers, upgrades } from "hardhat";
 
-import { deployBridgedTokenBeacon } from "./deployBridgedTokenBeacon";
+import { TokenBridge } from "../../../typechain-types";
 import { SupportedChainIds } from "../../../utils/supportedNetworks";
+import { deployBridgedTokenBeacon } from "./deployBridgedTokenBeacon";
 
 export async function deployTokenBridge(messageServiceAddress: string, verbose = false) {
   const [owner] = await ethers.getSigners();
@@ -13,35 +14,35 @@ export async function deployTokenBridge(messageServiceAddress: string, verbose =
   // Deploying TokenBridges
   const TokenBridgeFactory = await ethers.getContractFactory("TokenBridge");
 
-  const l1TokenBridge = await upgrades.deployProxy(TokenBridgeFactory, [
+  const l1TokenBridge = (await upgrades.deployProxy(TokenBridgeFactory, [
     owner.address,
     messageServiceAddress,
-    tokenBeacons.l1TokenBeacon.address,
+    await tokenBeacons.l1TokenBeacon.getAddress(),
     chainIds[0],
     chainIds[1],
     [], // Reseved Addresses
-  ]);
-  await l1TokenBridge.deployed();
+  ])) as unknown as TokenBridge;
+  await l1TokenBridge.waitForDeployment();
   if (verbose) {
-    console.log("L1TokenBridge deployed, at address:", l1TokenBridge.address);
+    console.log("L1TokenBridge deployed, at address:", await l1TokenBridge.getAddress());
   }
 
-  const l2TokenBridge = await upgrades.deployProxy(TokenBridgeFactory, [
+  const l2TokenBridge = (await upgrades.deployProxy(TokenBridgeFactory, [
     owner.address,
     messageServiceAddress,
-    tokenBeacons.l2TokenBeacon.address,
+    await tokenBeacons.l2TokenBeacon.getAddress(),
     chainIds[1],
     chainIds[0],
     [], // Reseved Addresses
-  ]);
-  await l2TokenBridge.deployed();
+  ])) as unknown as TokenBridge;
+  await l2TokenBridge.waitForDeployment();
   if (verbose) {
-    console.log("L2TokenBridge deployed, at address:", l2TokenBridge.address);
+    console.log("L2TokenBridge deployed, at address:", await l2TokenBridge.getAddress());
   }
 
   // Setting reciprocal addresses of TokenBridges
-  await l1TokenBridge.setRemoteTokenBridge(l2TokenBridge.address);
-  await l2TokenBridge.setRemoteTokenBridge(l1TokenBridge.address);
+  await l1TokenBridge.setRemoteTokenBridge(await l2TokenBridge.getAddress());
+  await l2TokenBridge.setRemoteTokenBridge(await l1TokenBridge.getAddress());
   if (verbose) {
     console.log("Reciprocal addresses of TokenBridges set");
   }
@@ -58,8 +59,8 @@ export async function deployTokenBridgeWithMockMessaging(verbose = false) {
 
   // Deploying mock messaging service
   const messageService = await MessageServiceFactory.deploy();
-  await messageService.deployed();
+  await messageService.waitForDeployment();
 
-  const deploymentVars = await deployTokenBridge(messageService.address, verbose);
+  const deploymentVars = await deployTokenBridge(await messageService.getAddress(), verbose);
   return { messageService, ...deploymentVars };
 }

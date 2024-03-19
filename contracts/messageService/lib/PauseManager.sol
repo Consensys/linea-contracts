@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity >=0.8.19 <=0.8.22;
+pragma solidity >=0.8.19 <=0.8.24;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
@@ -22,6 +22,10 @@ abstract contract PauseManager is Initializable, IPauseManager, AccessControlUpg
   mapping(bytes32 pauseType => bool pauseStatus) public pauseTypeStatuses;
 
   uint256 private _pauseTypeStatusesBitMap;
+
+  /// @dev Total contract storage is 11 slots with the gap below.
+  /// @dev Keep 9 free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Note: This was reduced previously to cater for new functionality.
   uint256[9] private __gap;
 
   /**

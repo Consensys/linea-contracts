@@ -1,5 +1,5 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TimeLock } from "../typechain-types";
@@ -17,7 +17,7 @@ describe("Timelock", () => {
       10,
       [proposer.address],
       [executor.address],
-      ethers.constants.AddressZero,
+      ethers.ZeroAddress,
     ) as Promise<TimeLock>;
   }
 
@@ -31,7 +31,7 @@ describe("Timelock", () => {
 
   describe("Initialization", () => {
     it("Timelock contract should have the 'TIMELOCK_ADMIN_ROLE' role", async () => {
-      expect(await contract.hasRole(TIMELOCK_ADMIN_ROLE, contract.address)).to.be.true;
+      expect(await contract.hasRole(TIMELOCK_ADMIN_ROLE, await contract.getAddress())).to.be.true;
     });
 
     it("Proposer address should have the 'PROPOSER_ROLE' role", async () => {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 /**
  * @title LineaRollup interface for current functions, events and errors.
@@ -8,6 +8,7 @@ pragma solidity 0.8.22;
  */
 interface ILineaRollup {
   /**
+   * @notice Supporting data for compressed calldata submission including compressed data.
    * @dev parentStateRootHash is the starting root hash.
    * @dev dataParentHash is used in order to link data.
    * @dev finalStateRootHash is used to set next data.
@@ -27,8 +28,27 @@ interface ILineaRollup {
   }
 
   /**
+   * @notice Supporting data for compressed blob data submission.
+   * @dev parentStateRootHash is the starting root hash.
+   * @dev dataParentHash is used in order to link data.
+   * @dev finalStateRootHash is used to set next data.
+   * @dev firstBlockInData is the first block that is included in the data submitted.
+   * @dev finalBlockInData is the last block that is included in the data submitted.
+   * @dev snarkHash is the computed hash for compressed data (using a SNARK-friendly hash function) that aggregates per data submission to be used in public input.
+   */
+  struct SupportingSubmissionData {
+    bytes32 parentStateRootHash;
+    bytes32 dataParentHash;
+    bytes32 finalStateRootHash;
+    uint256 firstBlockInData;
+    uint256 finalBlockInData;
+    bytes32 snarkHash;
+  }
+
+  /**
+   * @notice Supporting data for finalization with or without proof.
    * @dev parentStateRootHash is the expected last state root hash finalized.
-   * @dev dataHashes is the optional previously submitted compressed data item hashes.
+   * @dev dataHashes is the required previously submitted compressed data item hashes.
    * @dev dataParentHash is the last finalized compressed data item hash.
    * @dev finalBlockNumber is the last block that is being finalized.
    * @dev lastFinalizedTimestamp is the expected last finalized block's timestamp.
@@ -56,7 +76,13 @@ interface ILineaRollup {
   }
 
   /**
-   * @dev Emitted when a verifier is set for a particular proof type.
+   * @notice Emitted when a verifier is set for a particular proof type.
+   * @param verifierAddress The indexed new verifier address being set.
+   * @param proofType The indexed proof type/index that the verifier is mapped to.
+   * @param verifierSetBy The index address who set the verifier at the mapping.
+   * @param oldVerifierAddress Indicates the previous address mapped to the proof type.
+   * @dev The verifier will be set by an account with the VERIFIER_SETTER_ROLE. Typically the Safe.
+   * @dev The oldVerifierAddress can be the zero address.
    */
   event VerifierAddressChanged(
     address indexed verifierAddress,
@@ -66,12 +92,19 @@ interface ILineaRollup {
   );
 
   /**
-   * @dev Emitted when compressed data is being submitted and verified succesfully on L1.
+   * @notice Emitted when compressed data is being submitted and verified succesfully on L1.
+   * @param dataHash The indexed data hash for the data being submitted.
+   * @param startBlock The indexed L2 block number indicating which block the data starts from.
+   * @param endBlock The indexed L2 block number indicating which block the data ends on.
    */
   event DataSubmitted(bytes32 indexed dataHash, uint256 indexed startBlock, uint256 indexed endBlock);
 
   /**
-   * @dev Emitted when L2 blocks have been finalized on L1.
+   * @notice Emitted when L2 blocks have been finalized on L1.
+   * @param lastBlockFinalized The indexed last L2 block that is finalized in the finalization.
+   * @param startingRootHash The indexed initial (also last finalized) L2 state root hash that the finalization is from.
+   * @param finalRootHash The indexed L2 state root hash that the current finalization is up until.
+   * @param withProof Indicates if the finalization is proven or not.
    */
   event DataFinalized(
     uint256 indexed lastBlockFinalized,
@@ -79,6 +112,31 @@ interface ILineaRollup {
     bytes32 indexed finalRootHash,
     bool withProof
   );
+
+  /**
+   * @dev Thrown when the Y point polynomial is greater than the BLS12-381 curve modulus.
+   */
+  error YPointGreaterThanCurveModulus();
+
+  /**
+   * @dev Thrown when the point evaluation precompile call return data field(s) are wrong.
+   */
+  error PointEvaluationResponseInvalid(uint256 fieldElements, uint256 blsCurveModulus);
+
+  /**
+   * @dev Thrown when the point evaluation precompile call return data length is wrong.
+   */
+  error PrecompileReturnDataLengthWrong(uint256 expected, uint256 actual);
+
+  /**
+   * @dev Thrown when the point evaluation precompile call returns false.
+   */
+  error PointEvaluationFailed();
+
+  /**
+   * @dev Thrown when the blobhash equals to the zero hash.
+   */
+  error EmptyBlobData();
 
   /**
    * @dev Thrown when the starting block in the data item is out of sequence with the last block number.
@@ -106,6 +164,11 @@ interface ILineaRollup {
   error StateRootHashInvalid(bytes32 expected, bytes32 actual);
 
   /**
+   * @dev Thrown when the last finalized shnarf does not match the parent finalizing from.
+   */
+  error LastFinalizedShnarfWrong(bytes32 expected, bytes32 actual);
+
+  /**
    * @dev Thrown when submissionData is empty.
    */
   error EmptySubmissionData();
@@ -124,11 +187,6 @@ interface ILineaRollup {
    * @dev Thrown when finalizationData.lastFinalizedTimestamp does not match currentTimestamp.
    */
   error TimestampsNotInSequence(uint256 expected, uint256 value);
-
-  /**
-   * @dev Thrown when the last submissionData finalBlockInData does not match finalizationData.finalBlockNumber.
-   */
-  error FinalBlockNumberInvalid(uint256 expected, uint256 value);
 
   /**
    * @dev Thrown when finalizationData.dataParentHash does not match parent of _finalizationData.dataHashes[0].
@@ -200,10 +258,25 @@ interface ILineaRollup {
   function setVerifierAddress(address _newVerifierAddress, uint256 _proofType) external;
 
   /**
-   * @notice Submit compressed data.
+   * @notice Submit compressed blob data using EIP-4844 blobs.
    * @dev OPERATOR_ROLE is required to execute.
-   * @param _submissionData The full compressed data collection - parentStateRootHash, dataParentHash,
-   * finalStateRootHash, firstBlockInData, finalBlockInData, snarkHash, compressedData.
+   * @dev This should be a blob carrying transaction.
+   * @param _submissionData The supporting data for blob data submission excluding the compressed data.
+   * @param _dataEvaluationClaim The data evaluation claim.
+   * @param _kzgCommitment The blob KZG commitment.
+   * @param _kzgProof The blob KZG point proof.
+   */
+  function submitBlobData(
+    SupportingSubmissionData calldata _submissionData,
+    uint256 _dataEvaluationClaim,
+    bytes calldata _kzgCommitment,
+    bytes calldata _kzgProof
+  ) external;
+
+  /**
+   * @notice Submit blobs using compressed data via calldata.
+   * @dev OPERATOR_ROLE is required to execute.
+   * @param _submissionData The supporting data for compressed data submission including compressed data.
    */
   function submitData(SubmissionData calldata _submissionData) external;
 

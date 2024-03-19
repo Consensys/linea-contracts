@@ -1,5 +1,5 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { TestRateLimiter } from "../typechain-types";
@@ -11,13 +11,13 @@ describe("Rate limiter", () => {
   let defaultAdmin: SignerWithAddress;
   let resetAdmin: SignerWithAddress;
 
-  const ONE_HUNDRED_ETH = ethers.utils.parseUnits("100", 18);
-  const NINE_HUNDRED_ETH = ethers.utils.parseUnits("900", 18);
+  const ONE_HUNDRED_ETH = ethers.parseUnits("100", 18);
+  const NINE_HUNDRED_ETH = ethers.parseUnits("900", 18);
 
   async function deployTestRateLimiterFixture(): Promise<TestRateLimiter> {
-    return deployUpgradableFromFactory("TestRateLimiter", [ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH.add(NINE_HUNDRED_ETH)], {
+    return deployUpgradableFromFactory("TestRateLimiter", [ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH + NINE_HUNDRED_ETH], {
       initializer: "initialize(uint256,uint256)",
-    }) as Promise<TestRateLimiter>;
+    }) as unknown as Promise<TestRateLimiter>;
   }
 
   before(async () => {
@@ -55,26 +55,32 @@ describe("Rate limiter", () => {
 
       const blockNumBefore = await ethers.provider.getBlockNumber();
       const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+
+      if (!blockBefore) {
+        throw "blockBefore null";
+      }
+
       const currentTimestamp = blockBefore.timestamp + 1;
       const currentPeriodEnd = currentTimestamp + ONE_DAY_IN_SECONDS;
 
       const factory = await ethers.getContractFactory("TestRateLimiter");
       const contract = await upgrades.deployProxy(factory, [ONE_DAY_IN_SECONDS, ONE_HUNDRED_ETH]);
-      await contract.deployed();
+      await contract.waitForDeployment();
 
-      const receipt = await ethers.provider.getTransactionReceipt(contract.deployTransaction.hash);
+      const receipt = await ethers.provider.getTransactionReceipt(contract.deploymentTransaction()!.hash);
 
-      const filteredLogs = receipt.logs.filter(
-        (log) => log.address === contract.address && log.topics[0] === RateLimitInitializedEvent,
+      expect(receipt).to.not.be.null;
+
+      const contractAddress = await contract.getAddress();
+      const filteredLogs = receipt!.logs.filter(
+        (log) => log.address === contractAddress && log.topics[0] === RateLimitInitializedEvent,
       );
       expect(filteredLogs.length).to.equal(1);
       const parsedLogs = contract.interface.parseLog(filteredLogs[0]);
 
-      expect(parsedLogs.args.periodInSeconds).to.equal(ONE_DAY_IN_SECONDS);
-
-      expect(parsedLogs.args.limitInWei).to.equal(limitInWei);
-
-      expect(parsedLogs.args.currentPeriodEnd).to.equal(currentPeriodEnd);
+      expect(parsedLogs!.args.periodInSeconds).to.equal(ONE_DAY_IN_SECONDS);
+      expect(parsedLogs!.args.limitInWei).to.equal(limitInWei);
+      expect(parsedLogs!.args.currentPeriodEnd).to.equal(currentPeriodEnd);
     });
 
     it("fails to initialise when the period is zero", async () => {
@@ -97,12 +103,12 @@ describe("Rate limiter", () => {
     it("currentPeriodAmountInWei increases to the limit", async () => {
       await testRateLimiter.withdrawSomeAmount(ONE_HUNDRED_ETH);
       await testRateLimiter.withdrawSomeAmount(NINE_HUNDRED_ETH);
-      expect(await testRateLimiter.currentPeriodAmountInWei()).to.be.equal(ONE_HUNDRED_ETH.add(NINE_HUNDRED_ETH));
+      expect(await testRateLimiter.currentPeriodAmountInWei()).to.be.equal(ONE_HUNDRED_ETH + NINE_HUNDRED_ETH);
     });
 
     it("withdrawing beyond the limit fails", async () => {
-      await testRateLimiter.withdrawSomeAmount(ONE_HUNDRED_ETH.add(NINE_HUNDRED_ETH));
-      expect(await testRateLimiter.currentPeriodAmountInWei()).to.be.equal(ONE_HUNDRED_ETH.add(NINE_HUNDRED_ETH));
+      await testRateLimiter.withdrawSomeAmount(ONE_HUNDRED_ETH + NINE_HUNDRED_ETH);
+      expect(await testRateLimiter.currentPeriodAmountInWei()).to.be.equal(ONE_HUNDRED_ETH + NINE_HUNDRED_ETH);
       await expect(testRateLimiter.withdrawSomeAmount(1)).to.revertedWithCustomError(
         testRateLimiter,
         "RateLimitExceeded",
