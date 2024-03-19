@@ -19,7 +19,7 @@ describe("Mimc", () => {
   describe("hash", () => {
     it("Should return mimc hash for each test case", async () => {
       for (const element of mimcTestData) {
-        const msgs = ethers.utils.hexConcat(element.in);
+        const msgs = ethers.concat(element.in);
         expect(await mimc.hash(msgs)).to.equal(element.out);
       }
     });

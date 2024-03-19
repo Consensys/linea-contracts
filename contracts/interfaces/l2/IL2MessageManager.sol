@@ -8,7 +8,9 @@ pragma solidity 0.8.19;
  */
 interface IL2MessageManager {
   /**
-   * @dev Emitted after all messages are anchored on L2 and the latest message index rolling hash stored.
+   * @notice Emitted after all messages are anchored on L2 and the latest message index rolling hash stored.
+   * @param messageNumber The unique L1 computed indexed message number for the message.
+   * @param rollingHash The indexed L1 rolling hash computed for the current message number.
    * @dev NB: This event is used to provide data to the rollup. The last messageNumber and rollingHash,
    * emitted in a rollup will be used in the public input for validating the L1->L2 messaging state transition.
    */
@@ -30,20 +32,10 @@ interface IL2MessageManager {
   error FinalRollingHashIsZero();
 
   /**
-   * @dev Reverts when old anchoring method is used post migration.
-   */
-  error ServiceHasMigratedToRollingHashes();
-
-  /**
    * @dev Emitted when the service switches over to a new version.
+   * @dev This is currently not in use, but left for future migrations and for existing consumers.
    */
   event ServiceVersionMigrated(uint256 indexed version);
-
-  /**
-   * @notice Anchor L1-> L2 message hashes.
-   * @param _messageHashes New message hashes to anchor on L2.
-   */
-  function addL1L2MessageHashes(bytes32[] calldata _messageHashes) external;
 
   /**
    * @notice Anchor L1-> L2 message hashes with expected message number and rolling hash.

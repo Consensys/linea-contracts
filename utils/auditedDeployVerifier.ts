@@ -17,7 +17,7 @@ export function getGitTagsAtCommitHash(): string[] {
 export function validateDeployBranchAndTags(networkName: string) {
   // Tag pattern - e.g. contract-audit-diligience-2022-08-28
   const tagPattern = /^contract-audit-\S+-\d{4}-\d{2}-\d{2}$/;
-  const branchPattern = /^(audit|main)/;
+  const branchPattern = /^audit\/|main\//;
 
   const networksRequiringAuditedCode: string[] = ["mainnet", "linea_mainnet", "goerli", "linea_goerli"];
 

@@ -1,16 +1,9 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TestL2MessageManager } from "../typechain-types";
-import {
-  DEFAULT_ADMIN_ROLE,
-  GENERAL_PAUSE_TYPE,
-  HASH_ZERO,
-  INBOX_STATUS_CLAIMED,
-  INBOX_STATUS_RECEIVED,
-  L1_L2_MESSAGE_SETTER_ROLE,
-} from "./utils/constants";
+import { DEFAULT_ADMIN_ROLE, GENERAL_PAUSE_TYPE, HASH_ZERO, L1_L2_MESSAGE_SETTER_ROLE } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
 import { calculateRollingHashFromCollection, generateKeccak256Hash, generateNKeccak256Hashes } from "./utils/helpers";
 
@@ -26,7 +19,7 @@ describe("L2MessageManager", () => {
     return deployUpgradableFromFactory("TestL2MessageManager", [
       pauser.address,
       l1l2MessageSetter.address,
-    ]) as Promise<TestL2MessageManager>;
+    ]) as unknown as Promise<TestL2MessageManager>;
   }
 
   beforeEach(async () => {
@@ -51,43 +44,6 @@ describe("L2MessageManager", () => {
       const messageHashes = generateNKeccak256Hashes("message", 2);
       await l2MessageManager.connect(pauser).pauseByType(GENERAL_PAUSE_TYPE);
 
-      await expect(l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes))
-        .to.be.revertedWithCustomError(l2MessageManager, "IsPaused")
-        .withArgs(GENERAL_PAUSE_TYPE);
-    });
-
-    it("Should revert addL1L2MessageHashes if the caller does not have the role 'L1_L2_MESSAGE_SETTER_ROLE'", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 2);
-
-      await expect(
-        l2MessageManager.connect(notAuthorizedAccount).addL1L2MessageHashes(messageHashes),
-      ).to.be.revertedWith(
-        `AccessControl: account ${notAuthorizedAccount.address.toLowerCase()} is missing role ${L1_L2_MESSAGE_SETTER_ROLE}`,
-      );
-    });
-
-    it("Should revert if message hashes array length is higher than one hundred", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 101);
-
-      await expect(
-        l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes),
-      ).to.be.revertedWithCustomError(l2MessageManager, "MessageHashesListLengthHigherThanOneHundred");
-    });
-
-    it("Should succeed if message hashes array param is correct", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 100);
-      await l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes);
-      for (const messageHash of messageHashes) {
-        expect(await l2MessageManager.connect(l1l2MessageSetter).inboxL1L2MessageStatus(messageHash)).to.equal(
-          INBOX_STATUS_RECEIVED,
-        );
-      }
-    });
-
-    it("Should revert if GENERAL_PAUSE_TYPE is enabled", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 2);
-      await l2MessageManager.connect(pauser).pauseByType(GENERAL_PAUSE_TYPE);
-
       await expect(
         l2MessageManager.connect(l1l2MessageSetter).anchorL1L2MessageHashes(messageHashes, 1, 100, HASH_ZERO),
       )
@@ -106,10 +62,7 @@ describe("L2MessageManager", () => {
 
     it("Should update rolling hash and messages emitting events", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 100),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 100));
 
       expect(
         await l2MessageManager
@@ -132,10 +85,7 @@ describe("L2MessageManager", () => {
 
     it("Should not emit events when a second anchoring is duplicated", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 100),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 100));
 
       expect(
         await l2MessageManager
@@ -159,17 +109,14 @@ describe("L2MessageManager", () => {
 
       const transactionReceipt = await transaction.wait();
 
-      expect(transactionReceipt.logs).to.be.empty;
+      expect(transactionReceipt?.logs).to.be.empty;
 
       expect(await l2MessageManager.lastAnchoredL1MessageNumber()).to.equal(100);
     });
 
     it("Should update rolling hashes mapping ignoring 1 duplicate", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
@@ -181,7 +128,7 @@ describe("L2MessageManager", () => {
       expect(mappedRollingHash).to.equal(expectedRollingHash);
 
       mappedRollingHash = await l2MessageManager.l1RollingHashes(100);
-      expect(mappedRollingHash).to.equal(ethers.constants.HashZero);
+      expect(mappedRollingHash).to.equal(ethers.ZeroHash);
 
       expect(await l2MessageManager.lastAnchoredL1MessageNumber()).to.equal(99);
     });
@@ -204,12 +151,9 @@ describe("L2MessageManager", () => {
 
     it("Should revert the with mistmatched hashes", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
-      const badRollingHash = calculateRollingHashFromCollection(ethers.constants.HashZero, messageHashes);
+      const badRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes);
 
-      const foundRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const foundRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
@@ -223,10 +167,7 @@ describe("L2MessageManager", () => {
     it("Should revert the with mistmatched counts", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
 
-      const foundRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const foundRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
@@ -241,10 +182,7 @@ describe("L2MessageManager", () => {
       await l2MessageManager.setLastAnchoredL1MessageNumber(100);
       const messageHashes = generateNKeccak256Hashes("message", 100);
 
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
@@ -262,10 +200,7 @@ describe("L2MessageManager", () => {
       await l2MessageManager.setLastAnchoredL1MessageNumber(100);
       const messageHashes = generateNKeccak256Hashes("message", 100);
 
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
@@ -278,70 +213,23 @@ describe("L2MessageManager", () => {
       expect(mappedRollingHash).to.equal(expectedRollingHash);
 
       mappedRollingHash = await l2MessageManager.l1RollingHashes(200);
-      expect(mappedRollingHash).to.equal(ethers.constants.HashZero);
+      expect(mappedRollingHash).to.equal(ethers.ZeroHash);
     });
 
-    it("Should emit the version lastAnchoredL1MessageNumber switches from 0", async () => {
+    it("Should NOT emit the ServiceVersionMigrated event when anchoring", async () => {
       await l2MessageManager.setLastAnchoredL1MessageNumber(100);
       const messageHashes = generateNKeccak256Hashes("message", 100);
 
-      const expectedRollingHash = calculateRollingHashFromCollection(
-        ethers.constants.HashZero,
-        messageHashes.slice(0, 99),
-      );
+      const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
 
       // forced duplicate
       messageHashes[99] = messageHashes[98];
 
-      expect(
-        await l2MessageManager
+      await expect(
+        l2MessageManager
           .connect(l1l2MessageSetter)
           .anchorL1L2MessageHashes(messageHashes, 101, 199, expectedRollingHash),
-      )
-        .emit(l2MessageManager, "ServiceVersionMigrated")
-        .withArgs(2);
-    });
-
-    it("Should fail old method post-migration", async () => {
-      await l2MessageManager.setLastAnchoredL1MessageNumber(100);
-      const messageHashes = generateNKeccak256Hashes("message", 100);
-
-      const expectedRollingHash = calculateRollingHashFromCollection(ethers.constants.HashZero, messageHashes);
-
-      expect(
-        await l2MessageManager
-          .connect(l1l2MessageSetter)
-          .anchorL1L2MessageHashes(messageHashes, 101, 200, expectedRollingHash),
-      )
-        .emit(l2MessageManager, "ServiceVersionMigrated")
-        .withArgs(2);
-
-      await expect(
-        l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes),
-      ).to.be.revertedWithCustomError(l2MessageManager, "ServiceHasMigratedToRollingHashes");
-    });
-
-    it("Should succeed if duplicates hashes exist in the array", async () => {
-      const messageHashes = [
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
-        generateKeccak256Hash("message1"),
-        generateKeccak256Hash("message1"),
-      ];
-      await l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes);
-      for (const messageHash of messageHashes) {
-        expect(await l2MessageManager.connect(l1l2MessageSetter).inboxL1L2MessageStatus(messageHash)).to.equal(
-          INBOX_STATUS_RECEIVED,
-        );
-      }
-    });
-
-    it("Should emit an event 'L1L2MessageHashesAddedToInbox' when succeed", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 50);
-
-      await expect(l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes))
-        .to.emit(l2MessageManager, "L1L2MessageHashesAddedToInbox")
-        .withArgs(messageHashes);
+      ).to.not.emit(l2MessageManager, "ServiceVersionMigrated");
     });
   });
 
@@ -352,16 +240,6 @@ describe("L2MessageManager", () => {
         l2MessageManager,
         "MessageDoesNotExistOrHasAlreadyBeenClaimed",
       );
-    });
-
-    it("Should succeed if message hash has the status 'received' in 'inboxL1L2MessageStatus' mapping", async () => {
-      const messageHash = generateKeccak256Hash("message1");
-      const messageHashes = generateNKeccak256Hashes("message", 50);
-
-      await l2MessageManager.connect(l1l2MessageSetter).addL1L2MessageHashes(messageHashes);
-      await l2MessageManager.updateL1L2MessageStatusToClaimed(messageHash);
-
-      expect(await l2MessageManager.inboxL1L2MessageStatus(messageHash)).to.equal(INBOX_STATUS_CLAIMED);
     });
   });
 });

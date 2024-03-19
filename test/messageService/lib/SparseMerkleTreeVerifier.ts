@@ -1,10 +1,10 @@
-import { ethers } from "hardhat";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { expect } from "chai";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { expect } from "chai";
+import { ethers } from "hardhat";
 import { TestSparseMerkleTreeVerifier } from "../../../typechain-types";
-import { deployFromFactory } from "../../utils/deployment";
 import { MESSAGE_FEE, MESSAGE_VALUE_1ETH } from "../../utils/constants";
+import { deployFromFactory } from "../../utils/deployment";
 
 describe("SparseMerkleTreeVerifier", () => {
   let sparseMerkleTreeVerifier: TestSparseMerkleTreeVerifier;
@@ -25,7 +25,7 @@ describe("SparseMerkleTreeVerifier", () => {
     const rightValue = "0xa49b884fb0575def8f20411b79cabc508d0fca402f124d4701a619516de1b8a5";
 
     it("Should return the same keccak hash as the solidity keccak precompile", async () => {
-      const solidityKeccakHash = ethers.utils.solidityKeccak256(["bytes32", "bytes32"], [leftValue, rightValue]);
+      const solidityKeccakHash = ethers.solidityPackedKeccak256(["bytes32", "bytes32"], [leftValue, rightValue]);
       const yulKeccakHash = await sparseMerkleTreeVerifier.efficientKeccak(leftValue, rightValue);
 
       expect(yulKeccakHash).to.equal(solidityKeccakHash);
@@ -44,7 +44,7 @@ describe("SparseMerkleTreeVerifier", () => {
         sender.address,
         recipient.address,
         MESSAGE_FEE,
-        MESSAGE_FEE.add(MESSAGE_VALUE_1ETH),
+        MESSAGE_FEE + MESSAGE_VALUE_1ETH,
         messageNumber,
         "0x",
       );
@@ -96,7 +96,7 @@ describe("SparseMerkleTreeVerifier", () => {
         sender.address,
         recipient.address,
         MESSAGE_FEE,
-        MESSAGE_FEE.add(MESSAGE_VALUE_1ETH),
+        MESSAGE_FEE + MESSAGE_VALUE_1ETH,
         messageNumber,
         "0x",
       );

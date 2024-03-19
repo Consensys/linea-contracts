@@ -1,9 +1,9 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployUpgradableFromFactory, requireEnv } from "../scripts/hardhat/utils";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
-import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -36,12 +36,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       unsafeAllow: ["constructor"],
     },
   );
-  const txReceipt = await contract.deployTransaction.wait(1);
-  console.log(`${contractName} deployed: address=${contract.address} blockNumber=${txReceipt.blockNumber}`);
+  const contractAddress = await contract.getAddress();
+  const txReceipt = await contract.deploymentTransaction()?.wait();
+  if (!txReceipt) {
+    throw "Contract deployment transaction receipt not found.";
+  }
+  console.log(`${contractName} deployed: address=${contractAddress} blockNumber=${txReceipt.blockNumber}`);
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, txReceipt.hash);
 
-  await tryVerifyContract(contract.address);
+  await tryVerifyContract(contractAddress);
 };
 export default func;
 func.tags = ["L2MessageService"];

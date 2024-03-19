@@ -1,14 +1,14 @@
 {
   "zkevm_dev": {
-    "BridgedToken": "0x17609b3d35ebe2C4a8d8143F17834dD774f91ac3",
-    "TokenBridge": "0xb554949Cf593EBd306F6a03418Ee8396BdeE9441"
+    "BridgedToken": "0x90Ca839E598F14a892aE77bc46Ad8327f9a3E65C",
+    "TokenBridge": "0x16B41c0D2796f724B77EE059A60c3c27036673c8"
   },
   "hardhat": {
-    "l1TokenBeacon": "0x4C4a2f8c81640e47606d3fd77B353E87Ba015584",
-    "l2TokenBeacon": "0x21dF544947ba3E8b3c32561399E88B52Dc8b2823"
+    "l1TokenBeacon": "0xDC11f7E700A4c898AE5CAddB1082cFfa76512aDD",
+    "l2TokenBeacon": "0x51A1ceB83B83F1985a81C295d1fF28Afef186E02"
   },
   "l2": {
-    "BridgedToken": "0x28315B48C7CBA7380Bdf4b80F4b8732f46031F6B",
-    "TokenBridge": "0xea903884A2027Ea434A992a0ac94933BF54Bf7A7"
+    "BridgedToken": "0x5AABddC53F8B4d0f7Ba856e9d8340325f6680493",
+    "TokenBridge": "0x3807833f55F7dfea3931dda85F6e8f2E7d6A6821"
   }
 }

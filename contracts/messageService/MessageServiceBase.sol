@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity >=0.8.19 <=0.8.22;
+pragma solidity >=0.8.19 <=0.8.24;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { IMessageService } from "../interfaces/IMessageService.sol";
@@ -14,6 +14,8 @@ abstract contract MessageServiceBase is Initializable, IGenericErrors {
   IMessageService public messageService;
   address public remoteSender;
 
+  /// @dev Total contract storage is 12 slots with the gap below.
+  /// @dev Keep 10 free storage slots for future implementation updates to avoid storage collision.
   uint256[10] private __base_gap;
 
   /**

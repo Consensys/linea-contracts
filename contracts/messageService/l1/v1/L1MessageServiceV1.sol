@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -26,10 +26,11 @@ abstract contract L1MessageServiceV1 is
 
   address internal _messageSender;
 
-  // Keep free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Total contract storage is 52 slots including the gap below.
+  /// @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
   uint256[50] private __gap;
 
-  // @dev adding these should not affect storage as they are constants and are stored in bytecode.
+  /// @dev adding these should not affect storage as they are constants and are stored in bytecode.
   uint256 internal constant REFUND_OVERHEAD_IN_GAS = 48252;
 
   address internal constant DEFAULT_SENDER_ADDRESS = address(123456789);

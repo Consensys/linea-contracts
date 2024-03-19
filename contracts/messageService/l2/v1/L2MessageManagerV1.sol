@@ -30,6 +30,8 @@ abstract contract L2MessageManagerV1 is Initializable, PauseManager, IL2MessageM
   // NB: DO NOT USE THIS GAP
   // *******************************************************************************************
 
+  /// @dev Total contract storage is 1 slot.
+
   /**
    * @notice Initialises L2 message manager contract.
    * @param _l1l2MessageSetter The address owning the L1_L2_MESSAGE_SETTER_ROLE role.

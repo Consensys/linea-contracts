@@ -1,5 +1,5 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TestL2MessageService, TestMessageServiceBase } from "../typechain-types";
@@ -21,12 +21,12 @@ describe("MessageServiceBase", () => {
       l1L2MessageSetter.address,
       86400,
       INITIAL_WITHDRAW_LIMIT,
-    ])) as TestL2MessageService;
+    ])) as unknown as TestL2MessageService;
 
     const messageServiceBase = (await deployUpgradableFromFactory("TestMessageServiceBase", [
-      messageService.address,
+      await messageService.getAddress(),
       remoteSender.address,
-    ])) as TestMessageServiceBase;
+    ])) as unknown as TestMessageServiceBase;
     return { messageService, messageServiceBase };
   }
 
@@ -40,19 +40,19 @@ describe("MessageServiceBase", () => {
   describe("Initialization checks", () => {
     it("Should revert if message service address is address(0)", async () => {
       await expect(
-        deployUpgradableFromFactory("TestMessageServiceBase", [ethers.constants.AddressZero, remoteSender.address]),
+        deployUpgradableFromFactory("TestMessageServiceBase", [ethers.ZeroAddress, remoteSender.address]),
       ).to.be.revertedWithCustomError(messageServiceBase, "ZeroAddressNotAllowed");
     });
 
     it("It should fail when not initializing", async () => {
-      await expect(messageServiceBase.tryInitialize(messageService.address, remoteSender.address)).to.be.revertedWith(
-        "Initializable: contract is not initializing",
-      );
+      await expect(
+        messageServiceBase.tryInitialize(await messageService.getAddress(), remoteSender.address),
+      ).to.be.revertedWith("Initializable: contract is not initializing");
     });
 
     it("Should revert if remote sender address is address(0)", async () => {
       await expect(
-        deployUpgradableFromFactory("TestMessageServiceBase", [messageService.address, ethers.constants.AddressZero]),
+        deployUpgradableFromFactory("TestMessageServiceBase", [await messageService.getAddress(), ethers.ZeroAddress]),
       ).to.be.revertedWithCustomError(messageServiceBase, "ZeroAddressNotAllowed");
     });
 
@@ -61,7 +61,7 @@ describe("MessageServiceBase", () => {
     });
 
     it("Should set the value of messageService variable in storage", async () => {
-      expect(await messageServiceBase.messageService()).to.equal(messageService.address);
+      expect(await messageServiceBase.messageService()).to.equal(await messageService.getAddress());
     });
   });
 
@@ -74,7 +74,7 @@ describe("MessageServiceBase", () => {
     });
 
     it("Should succeed if msg.sender is the message service address", async () => {
-      expect(await messageService.callMessageServiceBase(messageServiceBase.address)).to.not.be.reverted;
+      expect(await messageService.callMessageServiceBase(await messageServiceBase.getAddress())).to.not.be.reverted;
     });
   });
 
@@ -88,9 +88,9 @@ describe("MessageServiceBase", () => {
 
     it("Should succeed if original sender is allowed", async () => {
       const messageServiceBase = (await deployUpgradableFromFactory("TestMessageServiceBase", [
-        messageService.address,
+        await messageService.getAddress(),
         "0x00000000000000000000000000000000075BCd15",
-      ])) as TestMessageServiceBase;
+      ])) as unknown as TestMessageServiceBase;
       await expect(messageServiceBase.withOnlyAuthorizedRemoteSender()).to.not.be.reverted;
     });
   });

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-pragma solidity >=0.8.19 <=0.8.22;
+pragma solidity >=0.8.19 <=0.8.24;
 
 import { IMessageService } from "../../../interfaces/IMessageService.sol";
 import { IGenericErrors } from "../../../interfaces/IGenericErrors.sol";
@@ -37,7 +37,7 @@ contract MockMessageServiceV2 is L1MessageManager, IMessageService, PauseManager
     bytes32 messageHash = keccak256(abi.encode(msg.sender, _to, _fee, valueSent, messageNumber, _calldata));
 
     // @dev Status check and revert is in the message manager
-    _addL1L2MessageHash(messageHash);
+    outboxL1L2MessageStatus[messageHash] = OUTBOX_STATUS_SENT;
 
     nextMessageNumber++;
 

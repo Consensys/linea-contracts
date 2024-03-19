@@ -21,9 +21,11 @@ abstract contract L2MessageServiceV1 is
   IMessageService,
   IGenericErrors
 {
-  // Keep free storage slots for future implementation updates to avoid storage collision.
-  // @dev NB: Take note that this is at the beginning of the file where other storage gaps,
-  // are at the end of files. Be careful with how storage is adjusted on upgrades.
+  /**
+   * @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
+   * NB: Take note that this is at the beginning of the file where other storage gaps,
+   * are at the end of files. Be careful with how storage is adjusted on upgrades.
+   */
   uint256[50] private __gap_L2MessageService;
 
   bytes32 public constant MINIMUM_FEE_SETTER_ROLE = keccak256("MINIMUM_FEE_SETTER_ROLE");
@@ -40,6 +42,8 @@ abstract contract L2MessageServiceV1 is
   uint256 internal constant REFUND_OVERHEAD_IN_GAS = 44596;
 
   address internal constant DEFAULT_SENDER_ADDRESS = address(123456789);
+
+  /// @dev Total contract storage is 53 slots including the gap above. NB: Above!
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {

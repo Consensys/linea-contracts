@@ -1,17 +1,17 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { Contract } from "ethers";
+import { TestUtils } from "../typechain-types";
 import { deployFromFactory } from "./utils/deployment";
 import { generateKeccak256, generateRandomBytes } from "./utils/helpers";
 
 describe("Utils Library", () => {
-  let contract: Contract;
+  let contract: TestUtils;
 
   async function deployTestUtilsFixture() {
     return deployFromFactory("TestUtils");
   }
   beforeEach(async () => {
-    contract = await loadFixture(deployTestUtilsFixture);
+    contract = (await loadFixture(deployTestUtilsFixture)) as TestUtils;
   });
 
   describe("efficientKeccak", () => {

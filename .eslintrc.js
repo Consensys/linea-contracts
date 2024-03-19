@@ -5,9 +5,9 @@ module.exports = {
     mocha: true,
     node: true,
   },
-  plugins: ["@typescript-eslint"],
-  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended", "prettier"],
+  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   parser: "@typescript-eslint/parser",
+  plugins: ["@typescript-eslint", "prettier"],
   parserOptions: {
     ecmaVersion: 12,
   },

@@ -1,11 +1,11 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { DeployFunction } from "hardhat-deploy/types";
-import { requireEnv } from "../scripts/hardhat/utils";
-import { getDeployedContractAddress } from "../utils/storeAddress";
 import { ethers, upgrades } from "hardhat";
+import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { requireEnv } from "../scripts/hardhat/utils";
 import { LineaRollupInit__factory } from "../typechain-types";
-import { tryVerifyContract } from "../utils/verifyContract";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
+import { getDeployedContractAddress } from "../utils/storeAddress";
+import { tryVerifyContract } from "../utils/verifyContract";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -36,9 +36,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log(`Contract deployed at ${contract}`);
 
   // The encoding should be used through the safe.
-  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.concat([
     "0x9623609d",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "address", "bytes"],
       [
         proxyAddress,

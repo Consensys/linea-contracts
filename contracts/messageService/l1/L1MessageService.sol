@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { AccessControlUpgradeable } from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import { L1MessageServiceV1 } from "./v1/L1MessageServiceV1.sol";
@@ -22,9 +22,11 @@ abstract contract L1MessageService is
 {
   using SparseMerkleTreeVerifier for *;
 
+  /// @dev This is currently not in use, but is reserved for future upgrades.
   uint256 public systemMigrationBlock;
 
-  // Keep free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Total contract storage is 51 slots including the gap below.
+  /// @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
   uint256[50] private __gap_L1MessageService;
 
   /**
@@ -34,14 +36,12 @@ abstract contract L1MessageService is
    * @param _pauseManagerAddress The address owning the pause management role.
    * @param _rateLimitPeriod The period to rate limit against.
    * @param _rateLimitAmount The limit allowed for withdrawing the period.
-   * @param _systemMigrationBlock The service migration block.
    */
   function __MessageService_init(
     address _limitManagerAddress,
     address _pauseManagerAddress,
     uint256 _rateLimitPeriod,
-    uint256 _rateLimitAmount,
-    uint256 _systemMigrationBlock
+    uint256 _rateLimitAmount
   ) internal onlyInitializing {
     if (_limitManagerAddress == address(0)) {
       revert ZeroAddressNotAllowed();
@@ -59,25 +59,8 @@ abstract contract L1MessageService is
     _grantRole(RATE_LIMIT_SETTER_ROLE, _limitManagerAddress);
     _grantRole(PAUSE_MANAGER_ROLE, _pauseManagerAddress);
 
-    __SystemMigrationBlock_init(_systemMigrationBlock);
-
     nextMessageNumber = 1;
     _messageSender = DEFAULT_SENDER_ADDRESS;
-  }
-
-  /**
-   * @notice Initializer function when upgrading.
-   * @dev Sets the systemMigrationBlock when the migration will occur.
-   * @param _systemMigrationBlock The future migration block.
-   */
-  function __SystemMigrationBlock_init(uint256 _systemMigrationBlock) internal onlyInitializing {
-    if (_systemMigrationBlock == 0) {
-      revert SystemMigrationBlockZero();
-    }
-
-    systemMigrationBlock = _systemMigrationBlock;
-
-    emit SystemMigrationBlockInitialized(systemMigrationBlock);
   }
 
   /**
@@ -106,11 +89,7 @@ abstract contract L1MessageService is
 
     bytes32 messageHash = keccak256(abi.encode(msg.sender, _to, _fee, valueSent, messageNumber, _calldata));
 
-    if (systemMigrationBlock > block.number) {
-      _addL1L2MessageHash(messageHash);
-    } else {
-      _addRollingHash(messageNumber, messageHash);
-    }
+    _addRollingHash(messageNumber, messageHash);
 
     emit MessageSent(msg.sender, _to, _fee, valueSent, messageNumber, _calldata, messageHash);
   }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.22;
+pragma solidity 0.8.24;
 
 import { BitMaps } from "@openzeppelin/contracts/utils/structs/BitMaps.sol";
 import { L1MessageManagerV1 } from "./v1/L1MessageManagerV1.sol";
@@ -19,7 +19,8 @@ abstract contract L1MessageManager is L1MessageManagerV1, IL1MessageManager {
   BitMaps.BitMap internal _messageClaimedBitMap;
   mapping(bytes32 merkleRoot => uint256 treeDepth) public l2MerkleRootsDepths;
 
-  /// @dev Keep free storage slots for future implementation updates to avoid storage collision.
+  /// @dev Total contract storage is 53 slots including the gap below.
+  /// @dev Keep 50 free storage slots for future implementation updates to avoid storage collision.
   uint256[50] private __gap_L1MessageManager;
 
   /**

@@ -1,10 +1,11 @@
 import { ethers } from "hardhat";
+import { LineaRollup } from "../../typechain-types";
 
 async function main() {
   // TESTING ON L1
 
   const factory = await ethers.getContractFactory("LineaRollup");
-  const proxyContract = factory.attach("0x41B186Dc7C46f08ADFdCe21Da1b07f605819E9Ab");
+  const proxyContract = factory.attach("0x41B186Dc7C46f08ADFdCe21Da1b07f605819E9Ab") as LineaRollup;
 
   const verifier0 = await proxyContract.verifiers(0);
   const verifier1 = await proxyContract.verifiers(1);

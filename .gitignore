@@ -7,4 +7,4 @@ typechain-types
 cache
 build
 .openzeppelin
-
+.DS_Store

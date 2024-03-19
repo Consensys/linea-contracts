@@ -1,11 +1,11 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { ethers } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployFromFactory, requireEnv } from "../scripts/hardhat/utils";
-import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
-import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
 import { get1559Fees } from "../scripts/utils";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
-import { ethers } from "hardhat";
+import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
+import { tryVerifyContractWithConstructorArgs } from "../utils/verifyContract";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -41,14 +41,20 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     adminAddress,
     await get1559Fees(provider),
   );
+  const contractAddress = await contract.getAddress();
 
-  console.log(`${contractName} deployed at ${contract.address}`);
+  console.log(`${contractName} deployed at ${contractAddress}`);
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  const deployTx = contract.deploymentTransaction();
+  if (!deployTx) {
+    throw "Deployment transaction not found.";
+  }
+
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, deployTx.hash);
   const args = [minDelay, timeLockProposers?.split(","), timelockExecutors?.split(","), adminAddress];
 
   await tryVerifyContractWithConstructorArgs(
-    contract.address,
+    contractAddress,
     "contracts/messageService/lib/TimeLock.sol:TimeLock",
     args,
   );

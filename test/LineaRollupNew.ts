@@ -1,21 +1,20 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import fs from "fs";
 import { ethers } from "hardhat";
+import path from "path";
 import { TestLineaRollup } from "../typechain-types";
 import {
+  GENESIS_L2_TIMESTAMP,
+  HASH_ZERO,
   INITIAL_WITHDRAW_LIMIT,
   ONE_DAY_IN_SECONDS,
-  VERY_HIGH_MIGRATION_BLOCK,
   TEST_PUBLIC_VERIFIER_INDEX,
-  DEFAULT_SUBMISSION_DATA,
-  HASH_ZERO,
 } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
 import { generateFinalizationDataFromJSON, generateSubmissionDataFromJSON } from "./utils/helpers";
-import fs from "fs";
-import path from "path";
 
 // This stores initialization data for the smart-contract
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import INITIALIZATION_DATA from "./testData/integrationWithProver/rolling-hash-history.json";
 
 const submissionsDirectory = `${__dirname}/testData/integrationWithProver/blobSubmissions`;
@@ -57,9 +56,9 @@ describe("Linea Rollup  contract", () => {
   async function deployLineaRollupFixture() {
     const PlonkVerifierFactory = await ethers.getContractFactory("TestPlonkVerifierForDataAggregation");
     const plonkVerifier = await PlonkVerifierFactory.deploy();
-    await plonkVerifier.deployed();
+    await plonkVerifier.waitForDeployment();
 
-    verifier = plonkVerifier.address;
+    verifier = await plonkVerifier.getAddress();
 
     const lineaRollup = (await deployUpgradableFromFactory(
       "TestLineaRollup",
@@ -71,13 +70,13 @@ describe("Linea Rollup  contract", () => {
         [operator.address],
         ONE_DAY_IN_SECONDS,
         INITIAL_WITHDRAW_LIMIT,
-        VERY_HIGH_MIGRATION_BLOCK,
+        GENESIS_L2_TIMESTAMP,
       ],
       {
         initializer: "initialize(bytes32,uint256,address,address,address[],uint256,uint256,uint256)",
         unsafeAllow: ["constructor"],
       },
-    )) as TestLineaRollup;
+    )) as unknown as TestLineaRollup;
 
     return lineaRollup;
   }
@@ -135,7 +134,7 @@ describe("Linea Rollup  contract", () => {
           // NB: we are only interested in the transaction passing. That's why we
           // don't bother checking the emitted events. Also, the events are
           // tested in other separate tests.
-          await lineaRollup.connect(operator).submitData(submissionContractData, { gasLimit: 30_000_000 });
+          await lineaRollup.connect(operator).submitData(submissionContractData, "0x", { gasLimit: 30_000_000 });
         }
 
         index = 0;
@@ -157,14 +156,10 @@ describe("Linea Rollup  contract", () => {
               finalizationData.aggregatedProof,
               TEST_PUBLIC_VERIFIER_INDEX,
               finalizationData,
-              { gasLimit: 30_000_000 },
+              {
+                gasLimit: 30_000_000,
+              },
             );
-          // console.log("sending submission", submission.start, submission.stop);
-
-          // NB: we are only interested in the transaction passing. That's why we
-          // don't bother checking the emitted events. Also, the events are
-          // tested in other separate tests.
-          await lineaRollup.connect(operator).submitData(submissionContractData, { gasLimit: 30_000_000 });
         }
 
         for (const finalization of finalizationsJSON) {
@@ -180,8 +175,9 @@ describe("Linea Rollup  contract", () => {
               finalizationData.aggregatedProof,
               TEST_PUBLIC_VERIFIER_INDEX,
               finalizationData,
-              DEFAULT_SUBMISSION_DATA,
-              { gasLimit: 30_000_000 },
+              {
+                gasLimit: 30_000_000,
+              },
             );
         }
       },

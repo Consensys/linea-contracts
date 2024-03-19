@@ -1,6 +1,6 @@
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { BigNumber, Contract } from "ethers";
-import { ethers } from "hardhat";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { ethers } from "ethers";
+import { BridgedToken } from "../../../typechain-types";
 
 const Permit = [
   { name: "owner", type: "address" },
@@ -18,8 +18,8 @@ function buildData(
   verifyingContract: string,
   spender: string,
   value: number,
-  nonce: BigNumber,
-  deadline: BigNumber,
+  nonce: bigint,
+  deadline: bigint,
 ) {
   return {
     domain: { name, version, chainId, verifyingContract },
@@ -30,17 +30,17 @@ function buildData(
 
 export async function getPermitData(
   wallet: SignerWithAddress,
-  token: Contract,
-  nonce: BigNumber,
+  token: BridgedToken,
+  nonce: bigint,
   chainId: number,
   spender: string,
   value: number,
-  deadline: BigNumber,
+  deadline: bigint,
 ) {
   const name = await token.name();
-  const data = buildData(wallet.address, name, "1", chainId, token.address, spender, value, nonce, deadline);
-  const signature = await wallet._signTypedData(data.domain, data.types, data.value);
-  const { v, r, s } = ethers.utils.splitSignature(signature);
+  const data = buildData(wallet.address, name, "1", chainId, await token.getAddress(), spender, value, nonce, deadline);
+  const signature = await wallet.signTypedData(data.domain, data.types, data.value);
+  const { v, r, s } = ethers.Signature.from(signature);
   const permitCall = token.interface.encodeFunctionData("permit", [wallet.address, spender, value, deadline, v, r, s]);
   return permitCall;
 }

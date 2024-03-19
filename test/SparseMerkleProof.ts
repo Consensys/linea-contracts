@@ -10,9 +10,11 @@ describe("SparseMerkleProof", () => {
 
   async function deploySparseMerkleProofFixture() {
     const mimc = (await deployFromFactory("Mimc")) as Mimc;
-    const factory = await ethers.getContractFactory("SparseMerkleProof", { libraries: { Mimc: mimc.address } });
+    const factory = await ethers.getContractFactory("SparseMerkleProof", {
+      libraries: { Mimc: await mimc.getAddress() },
+    });
     const sparseMerkleProof = await factory.deploy();
-    await sparseMerkleProof.deployed();
+    await sparseMerkleProof.waitForDeployment();
     return sparseMerkleProof;
   }
 
@@ -128,7 +130,7 @@ describe("SparseMerkleProof", () => {
 
         await expect(sparseMerkleProof.getLeaf(wrongLeaftValue))
           .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
-          .withArgs(128, ethers.utils.hexDataLength(wrongLeaftValue));
+          .withArgs(128, ethers.dataLength(wrongLeaftValue));
       });
 
       it("Should return parsed leaf", async () => {
@@ -161,7 +163,7 @@ describe("SparseMerkleProof", () => {
 
         await expect(sparseMerkleProof.getLeaf(wrongLeaftValue))
           .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
-          .withArgs(128, ethers.utils.hexDataLength(wrongLeaftValue));
+          .withArgs(128, ethers.dataLength(wrongLeaftValue));
       });
 
       it("Should return parsed leaf", async () => {
@@ -195,7 +197,7 @@ describe("SparseMerkleProof", () => {
 
       await expect(sparseMerkleProof.getAccount(wrongAccountValue))
         .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
-        .withArgs(192, ethers.utils.hexDataLength(wrongAccountValue));
+        .withArgs(192, ethers.dataLength(wrongAccountValue));
     });
 
     it("Should return parsed leaf", async () => {

@@ -1,8 +1,8 @@
-import { ethers } from "hardhat";
+import { ethers } from "ethers";
 import fs from "fs";
 import path from "path";
-import { requireEnv } from "../hardhat/utils";
 import { LineaRollup__factory } from "../../typechain-types";
+import { requireEnv } from "../hardhat/utils";
 
 const proxyAdminContract = "0x326300c4ADDe0f7b0d5C763637D75620e4ccDAC8";
 const proxyContract = "0x41B186Dc7C46f08ADFdCe21Da1b07f605819E9Ab";
@@ -21,7 +21,7 @@ const ownerPrivateKey = requireEnv("OWNER_PRIVATE_KEY");
 
 async function main() {
   // Connect to the network
-  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
   const wallet = new ethers.Wallet(ownerPrivateKey, provider);
 
   // Load Gnosis Safe contract ABI
@@ -32,9 +32,9 @@ async function main() {
   const safeContract = new ethers.Contract(safeAddress, safeAbi, wallet);
 
   // Encode Tx
-  const upgradeCallSetMissingDataRanges = ethers.utils.hexConcat([
+  const upgradeCallSetMissingDataRanges = ethers.concat([
     "0x9623609d",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "address", "bytes"],
       [
         proxyContract,
@@ -50,32 +50,32 @@ async function main() {
     ),
   ]);
 
-  const timelockScheduleTransaction = ethers.utils.hexConcat([
+  const timelockScheduleTransaction = ethers.concat([
     "0x01d5062a",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32", "uint256"],
       [
         proxyAdminContract,
         0, //value
         upgradeCallSetMissingDataRanges,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
+        ethers.ZeroHash,
+        ethers.ZeroHash,
         0, //timelock delay
       ],
     ),
   ]);
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const timelockExecuteTransaction = ethers.utils.hexConcat([
+  const timelockExecuteTransaction = ethers.concat([
     "0x134008d3",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32"],
       [
         proxyAdminContract,
         0, //value
         upgradeCallSetMissingDataRanges,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
+        ethers.ZeroHash,
+        ethers.ZeroHash,
       ],
     ),
   ]);
@@ -86,14 +86,12 @@ async function main() {
   // const data = timelockExecuteTransaction; // Encoded Execute TX data
 
   // get signatures
-  const encodeSignature = ethers.utils.hexConcat([
-    `0x000000000000000000000000${wallet.address.slice(
-      2,
-    )}000000000000000000000000000000000000000000000000000000000000000001`,
+  const encodeSignature = ethers.concat([
+    `0x000000000000000000000000${wallet.address.slice(2)}000000000000000000000000000000000000000000000000000000000000000001`,
   ]);
 
   // Estimate Gas
-  const gasEstimate = await safeContract.estimateGas.execTransaction(
+  const gasEstimate = await safeContract.execTransaction.estimateGas(
     to,
     value,
     data,
@@ -101,8 +99,8 @@ async function main() {
     0, // safeTxGas
     0, // baseGas
     0, // gasPrice
-    ethers.constants.AddressZero, // gasToken
-    ethers.constants.AddressZero, // refundReceiver
+    ethers.ZeroAddress, // gasToken
+    ethers.ZeroAddress, // refundReceiver
     encodeSignature, // signatures
   );
 
@@ -115,10 +113,10 @@ async function main() {
     0, // safeTxGas , previously gasEstimate
     0, // baseGas
     0, // gasPrice
-    ethers.constants.AddressZero, // gasToken
-    ethers.constants.AddressZero, // refundReceiver
+    ethers.ZeroAddress, // gasToken
+    ethers.ZeroAddress, // refundReceiver
     encodeSignature, // signatures
-    { gasLimit: gasEstimate.add(50000) }, // add some extra gas
+    { gasLimit: gasEstimate + 50_000n }, // add some extra gas
   );
   await tx.wait();
 

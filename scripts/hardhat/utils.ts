@@ -1,44 +1,46 @@
-import { ethers, upgrades } from "hardhat";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { providers } from "ethers";
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { DeployProxyOptions } from "@openzeppelin/hardhat-upgrades/dist/utils";
-import { FactoryOptions } from "hardhat/types";
-import { ContractFactory } from "ethers";
+import { ContractFactory, JsonRpcProvider } from "ethers";
+import { ethers, upgrades } from "hardhat";
+import { FactoryOptions, HardhatEthersHelpers } from "hardhat/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function deployFromFactory(
   contractName: string,
-  provider: providers.JsonRpcProvider | null = null,
+  provider: JsonRpcProvider | HardhatEthersHelpers["provider"] | null = null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ...args: any[]
 ) {
   const startTime = performance.now();
   const skipLog = process.env.SKIP_DEPLOY_LOG === "true" || false;
   if (!skipLog) {
-    console.log(`Going to deploy ${contractName} with account ${provider?.getSigner().getAddress()}...`);
+    const signer = await provider?.getSigner();
+    console.log(`Going to deploy ${contractName} with account ${await signer?.getAddress()}...`);
   }
 
   const factory = await ethers.getContractFactory(contractName);
   if (provider) {
-    factory.connect(provider.getSigner());
+    factory.connect(await provider.getSigner());
   }
   const contract = await factory.deploy(...args);
   if (!skipLog) {
+    const deployTx = contract.deploymentTransaction();
+
     console.log(`${contractName} deployment transaction has been sent, waiting...`, {
-      nonce: contract.deployTransaction.nonce,
-      hash: contract.deployTransaction.hash,
-      gasPrice: contract.deployTransaction.gasPrice?.toString(),
-      maxFeePerGas: contract.deployTransaction.maxFeePerGas?.toString(),
-      maxPriorityFeePerGas: contract.deployTransaction.maxPriorityFeePerGas?.toString(),
-      gasLimit: contract.deployTransaction.gasLimit.toString(),
+      nonce: deployTx?.nonce,
+      hash: deployTx?.hash,
+      gasPrice: deployTx?.gasPrice?.toString(),
+      maxFeePerGas: deployTx?.maxFeePerGas?.toString(),
+      maxPriorityFeePerGas: deployTx?.maxPriorityFeePerGas?.toString(),
+      gasLimit: deployTx?.gasLimit.toString(),
     });
   }
-  const afterDeploy = await contract.deployed();
+  const afterDeploy = await contract.waitForDeployment();
   const timeDiff = performance.now() - startTime;
   if (!skipLog) {
     console.log(
-      `${contractName} deployed: time=${timeDiff / 1000}s blockNumber=${afterDeploy.deployTransaction.blockNumber}` +
-        ` tx-hash=${afterDeploy.deployTransaction.hash}`,
+      `${contractName} deployed: time=${timeDiff / 1000}s blockNumber=${afterDeploy.deploymentTransaction()?.blockNumber}` +
+        ` tx-hash=${afterDeploy.deploymentTransaction()?.hash}`,
     );
   }
   return contract;
@@ -58,18 +60,19 @@ async function deployUpgradableFromFactory(
   const factory = await ethers.getContractFactory(contractName, factoryOpts);
   const contract = await upgrades.deployProxy(factory, args, opts);
   if (!skipLog) {
+    const deployTx = contract.deploymentTransaction();
     console.log(`Upgradable ${contractName} deployment transaction has been sent, waiting...`, {
-      hash: contract.deployTransaction.hash,
-      gasPrice: contract.deployTransaction.gasPrice?.toString(),
-      gasLimit: contract.deployTransaction.gasLimit.toString(),
+      hash: deployTx?.hash,
+      gasPrice: deployTx?.gasPrice?.toString(),
+      gasLimit: deployTx?.gasLimit.toString(),
     });
   }
-  const afterDeploy = await contract.deployed();
+  const afterDeploy = await contract.waitForDeployment();
   const timeDiff = performance.now() - startTime;
   if (!skipLog) {
     console.log(
       `${contractName} artifact has been deployed in ${timeDiff / 1000}s` +
-        ` tx-hash=${afterDeploy.deployTransaction.hash}`,
+        ` tx-hash=${afterDeploy.deploymentTransaction()?.hash}`,
     );
   }
   return contract;
@@ -92,15 +95,16 @@ async function deployUpgradableWithAbiAndByteCode(
   const contract = await upgrades.deployProxy(factory, args, opts);
 
   if (!skipLog) {
+    const deployTx = contract.deploymentTransaction();
     console.log(`Upgradable ${contractName} deployment transaction has been sent, waiting...`, {
-      hash: contract.deployTransaction.hash,
-      gasPrice: contract.deployTransaction.gasPrice?.toString(),
-      gasLimit: contract.deployTransaction.gasLimit.toString(),
+      hash: deployTx?.hash,
+      gasPrice: deployTx?.gasPrice?.toString(),
+      gasLimit: deployTx?.gasLimit.toString(),
     });
   }
-  const afterDeploy = await contract.deployed();
+  const afterDeploy = await contract.waitForDeployment();
   if (!skipLog) {
-    console.log(`${contractName} artifact has been deployed in tx-hash=${afterDeploy.deployTransaction.hash}`);
+    console.log(`${contractName} artifact has been deployed in tx-hash=${afterDeploy.deploymentTransaction()?.hash}`);
   }
   return contract;
 }

@@ -109,7 +109,6 @@ Parameters that should be filled either in .env or passed as CLI arguments:
 | LINEA_ROLLUP_OPERATORS     | true      | address | L1 Operators Addresses (comma-delimited if multiple) |
 | LINEA_ROLLUP_RATE_LIMIT_PERIOD     | true  | uint256   | L1 Rate Limit Period |
 | LINEA_ROLLUP_RATE_LIMIT_AMOUNT     | true  | uint256   | L1 Rate Limit Amount |
-| LINEA_ROLLUP_SERVICE_MIGRATION_BLOCK     | true  | uint256   | L1 Service Migration Block |
 
 <br />
 
@@ -120,7 +119,7 @@ npx hardhat deploy --network goerli --tags LineaRollup
 
 Base command with cli arguments:
 ```shell
-SAVE_ADDRESS=true VERIFY_CONTRACT=true GOERLI_PRIVATE_KEY=<key> ETHERSCAN_API_KEY=<key> INFURA_API_KEY=<key> LINEA_ROLLUP_INITIAL_STATE_ROOT_HASH=<bytes> LINEA_ROLLUP_INITIAL_L2_BLOCK_NUMBER=<value> LINEA_ROLLUP_SECURITY_COUNCIL=<address> LINEA_ROLLUP_OPERATORS=<address> LINEA_ROLLUP_RATE_LIMIT_PERIOD=<value> LINEA_ROLLUP_RATE_LIMIT_AMOUNT=<value> LINEA_ROLLUP_SERVICE_MIGRATION_BLOCK=<value> npx hardhat deploy --network goerli --tags LineaRollup
+SAVE_ADDRESS=true VERIFY_CONTRACT=true GOERLI_PRIVATE_KEY=<key> ETHERSCAN_API_KEY=<key> INFURA_API_KEY=<key> LINEA_ROLLUP_INITIAL_STATE_ROOT_HASH=<bytes> LINEA_ROLLUP_INITIAL_L2_BLOCK_NUMBER=<value> LINEA_ROLLUP_SECURITY_COUNCIL=<address> LINEA_ROLLUP_OPERATORS=<address> LINEA_ROLLUP_RATE_LIMIT_PERIOD=<value> LINEA_ROLLUP_RATE_LIMIT_AMOUNT=<value> npx hardhat deploy --network goerli --tags LineaRollup
 ```
 
 (make sure to replace `<value>` `<key>` `<bytes>` `<address>` with actual values).

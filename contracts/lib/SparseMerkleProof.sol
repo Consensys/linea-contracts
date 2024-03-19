@@ -145,7 +145,7 @@ library SparseMerkleProof {
     bytes32 nextFreeNode = bytes32(_rawProof[0][:32]);
     bytes32 leafHash = Mimc.hash(_rawProof[rawProofLength - 1]);
 
-    for (uint i = 1; i < rawProofLength - 1; ) {
+    for (uint256 i = 1; i < rawProofLength - 1; ) {
       proof[rawProofLength - 2 - i] = Mimc.hash(_rawProof[i]);
       unchecked {
         ++i;

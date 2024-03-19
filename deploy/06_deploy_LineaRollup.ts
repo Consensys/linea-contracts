@@ -1,9 +1,9 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployUpgradableFromFactory, requireEnv } from "../scripts/hardhat/utils";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
-import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -31,7 +31,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const LineaRollup_operators = requireEnv("LINEA_ROLLUP_OPERATORS");
   const LineaRollup_rateLimitPeriodInSeconds = requireEnv("LINEA_ROLLUP_RATE_LIMIT_PERIOD");
   const LineaRollup_rateLimitAmountInWei = requireEnv("LINEA_ROLLUP_RATE_LIMIT_AMOUNT");
-  const LineaRollup_serviceMigrationBlock = requireEnv("LINEA_ROLLUP_SERVICE_MIGRATION_BLOCK");
+  const LineaRollup_genesisTimestamp = requireEnv("LINEA_ROLLUP_GENESIS_TIMESTAMP");
 
   console.log(`Setting operators ${LineaRollup_operators}`);
 
@@ -50,20 +50,24 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       LineaRollup_operators?.split(","),
       LineaRollup_rateLimitPeriodInSeconds,
       LineaRollup_rateLimitAmountInWei,
-      LineaRollup_serviceMigrationBlock,
+      LineaRollup_genesisTimestamp,
     ],
     {
       initializer: "initialize(bytes32,uint256,address,address,address[],uint256,uint256,uint256)",
       unsafeAllow: ["constructor"],
     },
   );
+  const contractAddress = await contract.getAddress();
+  const txReceipt = await contract.deploymentTransaction()?.wait();
+  if (!txReceipt) {
+    throw "Contract deployment transaction receipt not found.";
+  }
 
-  const txReceipt = await contract.deployTransaction.wait(1);
-  console.log(`${contractName} deployed: address=${contract.address} blockNumber=${txReceipt.blockNumber}`);
+  console.log(`${contractName} deployed: address=${contractAddress} blockNumber=${txReceipt.blockNumber}`);
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, txReceipt.hash);
 
-  await tryVerifyContract(contract.address);
+  await tryVerifyContract(contractAddress);
 };
 
 export default func;

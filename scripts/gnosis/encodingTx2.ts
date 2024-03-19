@@ -38,9 +38,9 @@ const main = async () => {
 
   //-------------------------UpgradeAndCall Directly with Migration Block--------------------------
 
-  const upgradeCallWithSystemMigrationBlockUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallWithSystemMigrationBlockUsingSecurityCouncil = ethers.concat([
     "0x9623609d",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "address", "bytes"],
       [
         proxyContract,
@@ -62,9 +62,9 @@ const main = async () => {
 
   //---------------------------Upgrade Directly------------------------------
 
-  const upgradeCallUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallUsingSecurityCouncil = ethers.concat([
     "0x99a88ec4",
-    ethers.utils.defaultAbiCoder.encode(["address", "address"], [proxyContract, NewImplementation]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["address", "address"], [proxyContract, NewImplementation]),
   ]);
 
   console.log("Encoded Upgrade call (directly) from Security Council :", "\n", upgradeCallUsingSecurityCouncil);
@@ -72,9 +72,9 @@ const main = async () => {
 
   //-----------------------Upgrade Directly with Reinitialization----------------------------------
 
-  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.concat([
     "0x9623609d",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "address", "bytes"],
       [
         proxyContract,
@@ -102,16 +102,16 @@ const main = async () => {
   console.log("\n");
 
   //-----------------------------Schedule with Migration Block----------------------------------
-  const scheduleUpgradeSystemMigrationBlockCallwithZodiac = ethers.utils.hexConcat([
+  const scheduleUpgradeSystemMigrationBlockCallwithZodiac = ethers.concat([
     "0x01d5062a",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32", "uint256"],
       [
         proxyAdminContract,
         0,
         upgradeCallWithSystemMigrationBlockUsingSecurityCouncil,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
+        ethers.ZeroHash,
+        ethers.ZeroHash,
         timelockDelay,
       ],
     ),
@@ -130,16 +130,16 @@ const main = async () => {
 
   //-------------------------------Execute with Migration Block------------------------------------
 
-  const executeUpgradeSystemMigrationBlockCallwithZodiac = ethers.utils.hexConcat([
+  const executeUpgradeSystemMigrationBlockCallwithZodiac = ethers.concat([
     "0x134008d3",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32"],
       [
         proxyAdminContract,
         0,
         upgradeCallWithSystemMigrationBlockUsingSecurityCouncil,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
+        ethers.ZeroHash,
+        ethers.ZeroHash,
       ],
     ),
   ]);
@@ -155,18 +155,11 @@ const main = async () => {
 
   //----------------------------Schedule--------------------------------------
 
-  const upgradeScheduleCallwithZodiac = ethers.utils.hexConcat([
+  const upgradeScheduleCallwithZodiac = ethers.concat([
     "0x01d5062a",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32", "uint256"],
-      [
-        proxyAdminContract,
-        0,
-        upgradeCallUsingSecurityCouncil,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
-        timelockDelay,
-      ],
+      [proxyAdminContract, 0, upgradeCallUsingSecurityCouncil, ethers.ZeroHash, ethers.ZeroHash, timelockDelay],
     ),
   ]);
 
@@ -183,11 +176,11 @@ const main = async () => {
 
   // -------------------------------Execute------------------------------------------
 
-  const upgradeExecuteCallwithZodiac = ethers.utils.hexConcat([
+  const upgradeExecuteCallwithZodiac = ethers.concat([
     "0x134008d3",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32"],
-      [proxyAdminContract, 0, upgradeCallUsingSecurityCouncil, ethers.constants.HashZero, ethers.constants.HashZero],
+      [proxyAdminContract, 0, upgradeCallUsingSecurityCouncil, ethers.ZeroHash, ethers.ZeroHash],
     ),
   ]);
 

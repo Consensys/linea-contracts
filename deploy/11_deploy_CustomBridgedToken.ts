@@ -1,10 +1,10 @@
 import { ethers, network } from "hardhat";
-import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
-import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
-import { tryVerifyContract } from "../utils/verifyContract";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployUpgradableFromFactory, requireEnv } from "../scripts/hardhat/utils";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
+import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
+import { tryVerifyContract } from "../utils/verifyContract";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -18,8 +18,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const CustomTokenBridge_decimals = requireEnv("CUSTOMTOKENBRIDGE_DECIMALS");
   const CustomTokenBridge_bridge_address = requireEnv("CUSTOMTOKENBRIDGE_BRIDGE_ADDRESS");
 
-  const [owner] = await ethers.getSigners();
-  const chainId = await owner.getChainId();
+  const chainId = (await ethers.provider.getNetwork()).chainId;
   console.log(`Current network's chainId is ${chainId}`);
 
   if (existingContractAddress === undefined) {
@@ -38,18 +37,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     },
   );
 
-  await customBridgedToken.deployed();
+  await customBridgedToken.waitForDeployment();
+  const customBridgedTokenAddress = await customBridgedToken.getAddress();
 
-  await tryStoreAddress(
-    network.name,
-    contractName,
-    customBridgedToken.address,
-    customBridgedToken.deployTransaction.hash,
-  );
+  const deployTx = customBridgedToken.deploymentTransaction();
+  if (!deployTx) {
+    throw "Contract deployment transaction receipt not found.";
+  }
 
-  console.log(`CustomBridgedToken deployed on ${network.name}, at address:`, customBridgedToken.address);
+  await tryStoreAddress(network.name, contractName, customBridgedTokenAddress, deployTx.hash);
 
-  await tryVerifyContract(customBridgedToken.address);
+  console.log(`CustomBridgedToken deployed on ${network.name}, at address:`, customBridgedTokenAddress);
+
+  await tryVerifyContract(customBridgedTokenAddress);
 };
 export default func;
 func.tags = ["CustomBridgedToken"];

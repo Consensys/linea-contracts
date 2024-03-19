@@ -1,32 +1,19 @@
 import "@nomicfoundation/hardhat-toolbox";
 import "@openzeppelin/hardhat-upgrades";
 import * as dotenv from "dotenv";
-import "hardhat-tracer";
-import { HardhatUserConfig } from "hardhat/config";
-import { MAX_GAS_LIMIT, getBlockchainNode, getContractOwnerPrivateKey, getL2BlockchainNode } from "./common";
 import "hardhat-deploy";
 import "hardhat-storage-layout";
+// import "hardhat-tracer"; // This plugin does not work with the latest hardhat version
+import { HardhatUserConfig } from "hardhat/config";
+import { getBlockchainNode, getL2BlockchainNode } from "./common";
 
 dotenv.config();
 
-const BLOCKCHAIN_TIMEOUT = process.env.BLOCKCHAIN_TIMEOUT_MS ? parseInt(process.env.BLOCKCHAIN_TIMEOUT_MS) : 300000;
+const BLOCKCHAIN_TIMEOUT = parseInt(process.env.BLOCKCHAIN_TIMEOUT_MS ?? "300000");
 const EMPTY_HASH = "0x0000000000000000000000000000000000000000000000000000000000000000";
 
 const blockchainNode = getBlockchainNode();
 const l2BlockchainNode = getL2BlockchainNode();
-
-const ownerPrivateKey = getContractOwnerPrivateKey(
-  "../node-data/test/keys/contract_owner.acc",
-  "/node-data/test/keys/contract_owner.acc",
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-  process.env.PRIVATE_KEY!,
-);
-
-const accounts = [];
-
-if (ownerPrivateKey) {
-  accounts.push(ownerPrivateKey);
-}
 
 const config: HardhatUserConfig = {
   paths: {
@@ -35,12 +22,13 @@ const config: HardhatUserConfig = {
   solidity: {
     compilers: [
       {
-        version: "0.8.22",
+        version: "0.8.24",
         settings: {
           optimizer: {
             enabled: true,
-            runs: 1000,
+            runs: 100000,
           },
+          evmVersion: "cancun",
         },
       },
       {
@@ -48,7 +36,7 @@ const config: HardhatUserConfig = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 1000,
+            runs: 100000,
           },
           evmVersion: "london",
         },
@@ -58,7 +46,7 @@ const config: HardhatUserConfig = {
         settings: {
           optimizer: {
             enabled: true,
-            runs: 1000,
+            runs: 100000,
           },
           evmVersion: "london",
         },
@@ -71,57 +59,40 @@ const config: HardhatUserConfig = {
     },
   },
   networks: {
+    hardhat: {
+      hardfork: "cancun",
+    },
     mainnet: {
-      accounts: [process.env.MAINNET_PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.MAINNET_PRIVATE_KEY || EMPTY_HASH],
       url: "https://mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     linea_mainnet: {
-      accounts: [process.env.LINEA_MAINNET_PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.LINEA_MAINNET_PRIVATE_KEY || EMPTY_HASH],
       url: "https://linea-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     goerli: {
-      accounts: [process.env.GOERLI_PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.GOERLI_PRIVATE_KEY || EMPTY_HASH],
       url: "https://goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     linea_goerli: {
-      accounts: [process.env.LINEA_GOERLI_PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.LINEA_GOERLI_PRIVATE_KEY || EMPTY_HASH],
       url: "https://linea-goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     custom: {
-      accounts: [process.env.CUSTOM_PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.CUSTOM_PRIVATE_KEY || EMPTY_HASH],
       url: process.env.CUSTOM_BLOCKCHAIN_URL ? process.env.CUSTOM_BLOCKCHAIN_URL : "",
-    },
-    besu: {
-      url: blockchainNode,
-      accounts,
-      gasPrice: 0,
-      gas: MAX_GAS_LIMIT,
-      blockGasLimit: MAX_GAS_LIMIT,
-      timeout: BLOCKCHAIN_TIMEOUT,
-    },
-    ganache: {
-      url: "http://127.0.0.1:8545",
-      accounts,
-      gasPrice: 0,
-      gas: MAX_GAS_LIMIT,
-      blockGasLimit: MAX_GAS_LIMIT,
-      timeout: BLOCKCHAIN_TIMEOUT,
     },
     zkevm_dev: {
       gasPrice: 1322222229,
       url: blockchainNode,
-      accounts: [process.env.PRIVATE_KEY ?? EMPTY_HASH],
+      accounts: [process.env.PRIVATE_KEY || EMPTY_HASH],
       timeout: BLOCKCHAIN_TIMEOUT,
     },
-    ...(l2BlockchainNode
-      ? {
-          l2: {
-            url: l2BlockchainNode,
-            accounts,
-            allowUnlimitedContractSize: true,
-          },
-        }
-      : {}),
+    l2: {
+      url: l2BlockchainNode ?? "",
+      accounts: [process.env.L2_PRIVATE_KEY || EMPTY_HASH],
+      allowUnlimitedContractSize: true,
+    },
   },
   gasReporter: {
     enabled: !!process.env.REPORT_GAS,

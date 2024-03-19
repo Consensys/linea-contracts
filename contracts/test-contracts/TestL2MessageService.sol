@@ -7,6 +7,10 @@ contract TestL2MessageService is L2MessageService {
   address public originalSender;
   bool private reentryDone;
 
+  function setLastAnchoredL1MessageNumber(uint256 _messageNumber) external {
+    lastAnchoredL1MessageNumber = _messageNumber;
+  }
+
   function canSendMessage(address _to, uint256 _fee, bytes calldata _calldata) external payable {
     this.sendMessage{ value: msg.value }(_to, _fee, _calldata);
   }

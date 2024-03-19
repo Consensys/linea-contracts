@@ -1,13 +1,7 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
-import { ethers } from "hardhat";
 import { TestL1MessageManager } from "../../../typechain-types";
-import {
-  INBOX_STATUS_RECEIVED,
-  INBOX_STATUS_UNKNOWN,
-  OUTBOX_STATUS_RECEIVED,
-  OUTBOX_STATUS_SENT,
-} from "../../utils/constants";
+import { INBOX_STATUS_UNKNOWN, OUTBOX_STATUS_RECEIVED, OUTBOX_STATUS_SENT } from "../../utils/constants";
 import { deployFromFactory } from "../../utils/deployment";
 import {
   generateKeccak256Hash,
@@ -26,32 +20,6 @@ describe("L1MessageManager", () => {
 
   beforeEach(async () => {
     l1MessageManager = await loadFixture(deployTestL1MessageManagerFixture);
-  });
-
-  describe("Add L2->L1 message hash in 'inboxL2L1MessageStatus' mapping", () => {
-    it("Should revert if the message hash already exists in 'inboxL2L1MessageStatus' mapping", async () => {
-      const messageHash = generateKeccak256Hash("message1");
-      await l1MessageManager.addL2L1MessageHash(messageHash);
-
-      await expect(l1MessageManager.addL2L1MessageHash(messageHash))
-        .to.be.revertedWithCustomError(l1MessageManager, "MessageAlreadyReceived")
-        .withArgs(messageHash);
-    });
-
-    it("Should succeed if message hash does not exist in 'inboxL2L1MessageStatus' mapping", async () => {
-      const messageHash = generateKeccak256Hash("message1");
-      await l1MessageManager.addL2L1MessageHash(messageHash);
-
-      expect(await l1MessageManager.inboxL2L1MessageStatus(messageHash)).to.equal(INBOX_STATUS_RECEIVED);
-    });
-
-    it("Should emit an event 'L2L1MessageHashAddedToInbox' when succeed", async () => {
-      const messageHash = generateKeccak256Hash("message1");
-
-      await expect(l1MessageManager.addL2L1MessageHash(messageHash))
-        .to.emit(l1MessageManager, "L2L1MessageHashAddedToInbox")
-        .withArgs(messageHash);
-    });
   });
 
   describe("Update L2->L1 message hash status in 'inboxL2L1MessageStatus' mapping to 'claimed'", () => {
@@ -122,17 +90,6 @@ describe("L1MessageManager", () => {
         expect(await l1MessageManager.outboxL1L2MessageStatus(messageHash)).to.equal(OUTBOX_STATUS_RECEIVED);
       }
     });
-
-    it("Should emit an event 'L1L2MessagesReceivedOnL2' when succeed", async () => {
-      const messageHashes = generateNKeccak256Hashes("message", 2);
-      for (const messageHash of messageHashes) {
-        await l1MessageManager.addL1L2MessageHash(messageHash);
-      }
-
-      await expect(l1MessageManager.updateL1L2MessageStatusToReceived(messageHashes))
-        .to.emit(l1MessageManager, "L1L2MessagesReceivedOnL2")
-        .withArgs(messageHashes);
-    });
   });
 
   describe("Set L2->L1 message status in '_messageClaimedBitMap' mapping to 'claimed'", () => {
@@ -190,14 +147,14 @@ describe("L1MessageManager", () => {
 
   describe("Anchor L2 messaging blocks on L1", () => {
     it("Should fail when '_l2MessagingBlocksOffsets' length is not a multiple of 2", async () => {
-      const currentL2BlockNumber = ethers.BigNumber.from(10);
+      const currentL2BlockNumber = 10n;
       await expect(l1MessageManager.anchorL2MessagingBlocks("0x01", currentL2BlockNumber))
         .to.be.revertedWithCustomError(l1MessageManager, "BytesLengthNotMultipleOfTwo")
         .withArgs(1);
     });
 
     it("Should not emit events when '_l2MessagingBlocksOffsets' is empty", async () => {
-      const currentL2BlockNumber = ethers.BigNumber.from(10);
+      const currentL2BlockNumber = 10n;
       await expect(l1MessageManager.anchorL2MessagingBlocks("0x", currentL2BlockNumber)).to.not.emit(
         l1MessageManager,
         "L2MessagingBlockAnchored",
@@ -205,22 +162,21 @@ describe("L1MessageManager", () => {
     });
 
     it("Should anchor L2 messaging blocks on L1 when the input is not an empty array", async () => {
-      const currentL2BlockNumber = ethers.BigNumber.from(10_000_000);
+      const currentL2BlockNumber = 10_000_000n;
 
       const arr = range(1, 50);
       const l2MessagingBlocks = generateL2MessagingBlocksOffsets(1, 50);
 
       const transaction = await l1MessageManager.anchorL2MessagingBlocks(l2MessagingBlocks, currentL2BlockNumber);
-      const { events } = await transaction.wait();
+      const receipt = await transaction.wait();
 
-      expect(events).to.not.be.undefined;
+      expect(receipt).to.not.be.undefined;
+      const events = await l1MessageManager.queryFilter(l1MessageManager.filters.L2MessagingBlockAnchored());
 
-      if (events) {
-        const filteredEvents = events.filter((event) => event.event === "L2MessagingBlockAnchored");
-        expect(filteredEvents.length).to.equal(50);
-        for (let i = 0; i < filteredEvents.length; i++) {
-          expect(filteredEvents[i].args?.l2Block).to.deep.equal(currentL2BlockNumber.add(arr[i]));
-        }
+      expect(events.length).to.equal(50);
+
+      for (let i = 0; i < events.length; i++) {
+        expect(events[i].args?.l2Block).to.deep.equal(currentL2BlockNumber + BigInt(arr[i]));
       }
     });
   });

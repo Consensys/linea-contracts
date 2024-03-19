@@ -1,5 +1,5 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TestPauseManager } from "../typechain-types";
@@ -14,7 +14,7 @@ import {
 import { deployUpgradableFromFactory } from "./utils/deployment";
 
 async function deployTestPauseManagerFixture(): Promise<TestPauseManager> {
-  return deployUpgradableFromFactory("TestPauseManager") as Promise<TestPauseManager>;
+  return deployUpgradableFromFactory("TestPauseManager") as unknown as Promise<TestPauseManager>;
 }
 
 describe("PauseManager", () => {

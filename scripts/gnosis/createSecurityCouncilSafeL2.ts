@@ -1,13 +1,13 @@
-import { ethers } from "hardhat";
+import { EthersAdapter, SafeFactory } from "@safe-global/protocol-kit";
+import { ethers } from "ethers";
 import { requireEnv } from "../hardhat/utils";
-import { SafeFactory, EthersAdapter } from "@safe-global/protocol-kit";
 import { get1559Fees } from "../utils";
 
 const main = async () => {
   const RPC_URL = requireEnv("BLOCKCHAIN_NODE");
   const SAFE_OWNER1_PRIVATE_KEY = requireEnv("SAFE_OWNER1_PRIVATE_KEY");
   const SAFE_OWNERS = requireEnv("SAFE_OWNERS");
-  const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
+  const provider = new ethers.JsonRpcProvider(RPC_URL);
   const signer = new ethers.Wallet(SAFE_OWNER1_PRIVATE_KEY, provider);
 
   const ethAdapter = new EthersAdapter({ ethers, signerOrProvider: signer });

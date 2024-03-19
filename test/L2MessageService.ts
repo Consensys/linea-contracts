@@ -1,7 +1,6 @@
+import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
-import { BigNumber } from "ethers";
 import { ethers, upgrades } from "hardhat";
 import { TestL2MessageService, TestReceivingContract } from "../typechain-types";
 import {
@@ -25,7 +24,12 @@ import {
   RATE_LIMIT_SETTER_ROLE,
 } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
-import { encodeSendMessage, generateKeccak256Hash } from "./utils/helpers";
+import {
+  calculateRollingHash,
+  calculateRollingHashFromCollection,
+  encodeSendMessage,
+  generateKeccak256Hash,
+} from "./utils/helpers";
 
 describe("L2MessageService", () => {
   let l2MessageService: TestL2MessageService;
@@ -42,7 +46,7 @@ describe("L2MessageService", () => {
       l1l2MessageSetter.address,
       86400,
       INITIAL_WITHDRAW_LIMIT,
-    ]) as Promise<TestL2MessageService>;
+    ]) as unknown as Promise<TestL2MessageService>;
   }
 
   beforeEach(async () => {
@@ -97,7 +101,7 @@ describe("L2MessageService", () => {
           securityCouncil.address,
           l1l2MessageSetter.address,
           0,
-          MESSAGE_VALUE_1ETH.add(MESSAGE_VALUE_1ETH),
+          MESSAGE_VALUE_1ETH + MESSAGE_VALUE_1ETH,
         ]),
       ).to.be.revertedWithCustomError(l2MessageService, "PeriodIsZero");
     });
@@ -105,7 +109,7 @@ describe("L2MessageService", () => {
     it("Should fail with empty securityCouncil address", async () => {
       await expect(
         deployUpgradableFromFactory("TestL2MessageService", [
-          ethers.constants.AddressZero,
+          ethers.ZeroAddress,
           l1l2MessageSetter.address,
           ONE_DAY_IN_SECONDS,
           INITIAL_WITHDRAW_LIMIT,
@@ -117,7 +121,7 @@ describe("L2MessageService", () => {
       await expect(
         deployUpgradableFromFactory("TestL2MessageService", [
           securityCouncil.address,
-          ethers.constants.AddressZero,
+          ethers.ZeroAddress,
           ONE_DAY_IN_SECONDS,
           INITIAL_WITHDRAW_LIMIT,
         ]),
@@ -148,7 +152,7 @@ describe("L2MessageService", () => {
 
       const newContract = await upgrades.upgradeProxy(contract, l2MessageServiceFactory);
 
-      const upgradedContract = await newContract.deployed();
+      const upgradedContract = await newContract.waitForDeployment();
       await upgrades.validateImplementation(l2MessageServiceFactory);
 
       expect(await upgradedContract.lastAnchoredL1MessageNumber()).to.equal(0);
@@ -188,7 +192,7 @@ describe("L2MessageService", () => {
       it("Should fail when the fee is higher than the amount sent", async () => {
         await expect(
           l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
-            value: MESSAGE_FEE.sub(ethers.utils.parseEther("0.01")),
+            value: MESSAGE_FEE - ethers.parseEther("0.01"),
           }),
         ).to.be.revertedWithCustomError(l2MessageService, "ValueSentTooLow");
       });
@@ -196,17 +200,17 @@ describe("L2MessageService", () => {
       it("Should fail when the coinbase fee transfer fails", async () => {
         await l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE);
 
-        await ethers.provider.send("hardhat_setCoinbase", [l2MessageService.address]);
+        await ethers.provider.send("hardhat_setCoinbase", [await l2MessageService.getAddress()]);
 
         await expect(
           l2MessageService
             .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE.add(MINIMUM_FEE), EMPTY_CALLDATA, {
-              value: MINIMUM_FEE.add(MINIMUM_FEE),
+            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
+              value: MINIMUM_FEE + MINIMUM_FEE,
             }),
         )
           .to.be.revertedWithCustomError(l2MessageService, "FeePaymentFailed")
-          .withArgs(l2MessageService.address);
+          .withArgs(await l2MessageService.getAddress());
 
         await ethers.provider.send("hardhat_setCoinbase", [BLOCK_COINBASE]);
       });
@@ -216,14 +220,14 @@ describe("L2MessageService", () => {
 
         await expect(
           l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
-            value: MESSAGE_FEE.add(ethers.utils.parseEther("0.01")),
+            value: MESSAGE_FEE + ethers.parseEther("0.01"),
           }),
         ).to.be.revertedWithCustomError(l2MessageService, "FeeTooLow");
       });
 
       it("Should fail when the to address is address 0", async () => {
         await expect(
-          l2MessageService.connect(admin).canSendMessage(ethers.constants.AddressZero, MESSAGE_FEE, "0x", {
+          l2MessageService.connect(admin).canSendMessage(ethers.ZeroAddress, MESSAGE_FEE, "0x", {
             value: MESSAGE_FEE,
           }),
         ).to.be.revertedWithCustomError(l2MessageService, "ZeroAddressNotAllowed");
@@ -236,11 +240,11 @@ describe("L2MessageService", () => {
 
         await l2MessageService
           .connect(admin)
-          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE.add(MINIMUM_FEE), EMPTY_CALLDATA, {
-            value: MINIMUM_FEE.add(MESSAGE_FEE),
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
+            value: MINIMUM_FEE + MESSAGE_FEE,
           });
 
-        expect(await ethers.provider.getBalance(BLOCK_COINBASE)).to.be.gt(initialCoinbaseBalance.add(MINIMUM_FEE));
+        expect(await ethers.provider.getBalance(BLOCK_COINBASE)).to.be.gt(initialCoinbaseBalance + MINIMUM_FEE);
       });
 
       it("Should succeed if 'MinimumFeeChanged' event is emitted", async () => {
@@ -249,9 +253,9 @@ describe("L2MessageService", () => {
           .withArgs(0, MINIMUM_FEE, securityCouncil.address);
 
         // Testing non-zero transition
-        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE.add(1)))
+        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE + 1n))
           .to.emit(l2MessageService, "MinimumFeeChanged")
-          .withArgs(MINIMUM_FEE, MINIMUM_FEE.add(1), securityCouncil.address);
+          .withArgs(MINIMUM_FEE, MINIMUM_FEE + 1n, securityCouncil.address);
       });
 
       it("Should succeed if 'MessageSent' event is emitted", async () => {
@@ -260,17 +264,17 @@ describe("L2MessageService", () => {
         const expectedBytes = await encodeSendMessage(
           securityCouncil.address,
           notAuthorizedAccount.address,
-          BigNumber.from(MESSAGE_FEE),
-          MESSAGE_VALUE_1ETH.sub(MESSAGE_FEE).sub(MINIMUM_FEE),
-          BigNumber.from(1),
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH - MESSAGE_FEE - MINIMUM_FEE,
+          1n,
           EMPTY_CALLDATA,
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService
             .connect(securityCouncil)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE.add(MINIMUM_FEE), EMPTY_CALLDATA, {
+            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
               value: MESSAGE_VALUE_1ETH,
             }),
         )
@@ -279,7 +283,7 @@ describe("L2MessageService", () => {
             securityCouncil.address,
             notAuthorizedAccount.address,
             MESSAGE_FEE,
-            MESSAGE_VALUE_1ETH.sub(MESSAGE_FEE).sub(MINIMUM_FEE),
+            MESSAGE_VALUE_1ETH - MESSAGE_FEE - MINIMUM_FEE,
             1,
             EMPTY_CALLDATA,
             messageHash,
@@ -292,14 +296,14 @@ describe("L2MessageService", () => {
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, "0x", {
-            value: MESSAGE_FEE.add(MESSAGE_VALUE_1ETH),
+            value: MESSAGE_FEE + MESSAGE_VALUE_1ETH,
           }),
         )
           .to.emit(l2MessageService, "MessageSent")
@@ -310,12 +314,12 @@ describe("L2MessageService", () => {
         const expectedBytes = await encodeSendMessage(
           securityCouncil.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           INITIAL_WITHDRAW_LIMIT,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService
@@ -338,7 +342,7 @@ describe("L2MessageService", () => {
         await expect(
           l2MessageService
             .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT.add(1) }),
+            .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT + 1n }),
         ).to.revertedWithCustomError(l2MessageService, "RateLimitExceeded");
       });
 
@@ -346,16 +350,16 @@ describe("L2MessageService", () => {
         await expect(
           l2MessageService
             .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, 1, "0x", { value: INITIAL_WITHDRAW_LIMIT.add(1) }),
+            .sendMessage(notAuthorizedAccount.address, 1, "0x", { value: INITIAL_WITHDRAW_LIMIT + 1n }),
         ).to.revertedWithCustomError(l2MessageService, "RateLimitExceeded");
       });
 
       it("Should fail when the rate limit would be exceeded - multi transactions", async () => {
         await l2MessageService
           .connect(admin)
-          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, "0x", { value: MESSAGE_FEE.add(MESSAGE_VALUE_1ETH) });
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, "0x", { value: MESSAGE_FEE + MESSAGE_VALUE_1ETH });
 
-        const breachingAmount = INITIAL_WITHDRAW_LIMIT.sub(MESSAGE_FEE).sub(MESSAGE_VALUE_1ETH).add(1);
+        const breachingAmount = INITIAL_WITHDRAW_LIMIT - MESSAGE_FEE - MESSAGE_VALUE_1ETH + 1n;
 
         await expect(
           l2MessageService
@@ -370,15 +374,8 @@ describe("L2MessageService", () => {
 
         const initialRateLimitUsed = await l2MessageService.currentPeriodAmountInWei();
 
-        const expectedBytes = await encodeSendMessage(
-          admin.address,
-          notAuthorizedAccount.address,
-          BigNumber.from(0),
-          BigNumber.from(0),
-          BigNumber.from(1),
-          "0x",
-        );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const expectedBytes = await encodeSendMessage(admin.address, notAuthorizedAccount.address, 0n, 0n, 1n, "0x");
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService
@@ -386,15 +383,7 @@ describe("L2MessageService", () => {
             .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE, "0x", { value: MINIMUM_FEE }),
         )
           .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            admin.address,
-            notAuthorizedAccount.address,
-            BigNumber.from(0),
-            BigNumber.from(0),
-            1,
-            "0x",
-            messageHash,
-          );
+          .withArgs(admin.address, notAuthorizedAccount.address, 0n, 0n, 1, "0x", messageHash);
 
         const postCoinbaseBalance = await ethers.provider.getBalance(BLOCK_COINBASE);
         await expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
@@ -412,12 +401,12 @@ describe("L2MessageService", () => {
         const expectedBytes = await encodeSendMessage(
           admin.address,
           notAuthorizedAccount.address,
-          MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE),
-          BigNumber.from(0),
-          BigNumber.from(1),
+          MESSAGE_VALUE_1ETH - MINIMUM_FEE,
+          0n,
+          1n,
           "0x",
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService
@@ -428,7 +417,7 @@ describe("L2MessageService", () => {
           .withArgs(
             admin.address,
             notAuthorizedAccount.address,
-            MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE),
+            MESSAGE_VALUE_1ETH - MINIMUM_FEE,
             0,
             1,
             "0x",
@@ -452,26 +441,24 @@ describe("L2MessageService", () => {
         const expectedBytes = await encodeSendMessage(
           admin.address,
           notAuthorizedAccount.address,
-          MINIMUM_FEE.add(MESSAGE_FEE).sub(MINIMUM_FEE),
-          MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE.add(MESSAGE_FEE)),
-          BigNumber.from(1),
+          MINIMUM_FEE + MESSAGE_FEE - MINIMUM_FEE,
+          MESSAGE_VALUE_1ETH - (MINIMUM_FEE + MESSAGE_FEE),
+          1n,
           "0x",
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE.add(MESSAGE_FEE), "0x", {
-              value: MESSAGE_VALUE_1ETH,
-            }),
+          l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MINIMUM_FEE + MESSAGE_FEE, "0x", {
+            value: MESSAGE_VALUE_1ETH,
+          }),
         )
           .to.emit(l2MessageService, "MessageSent")
           .withArgs(
             admin.address,
             notAuthorizedAccount.address,
-            MINIMUM_FEE.add(MESSAGE_FEE).sub(MINIMUM_FEE),
-            MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE.add(MESSAGE_FEE)),
+            MINIMUM_FEE + MESSAGE_FEE - MINIMUM_FEE,
+            MESSAGE_VALUE_1ETH - (MINIMUM_FEE + MESSAGE_FEE),
             1,
             "0x",
             messageHash,
@@ -481,8 +468,8 @@ describe("L2MessageService", () => {
 
         const postRateLimitUsed = await l2MessageService.currentPeriodAmountInWei();
 
-        await expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
-        expect(await postRateLimitUsed).to.be.gt(initialRateLimitUsed);
+        expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
+        expect(postRateLimitUsed).to.be.gt(initialRateLimitUsed);
       });
 
       it("Should accrue rate limit while sending transaction with value with coinbaseFee, postmanFee = 0", async () => {
@@ -494,12 +481,12 @@ describe("L2MessageService", () => {
         const expectedBytes = await encodeSendMessage(
           admin.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
-          MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE),
-          BigNumber.from(1),
+          0n,
+          MESSAGE_VALUE_1ETH - MINIMUM_FEE,
+          1n,
           "0x",
         );
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService
@@ -510,8 +497,8 @@ describe("L2MessageService", () => {
           .withArgs(
             admin.address,
             notAuthorizedAccount.address,
-            BigNumber.from(0),
-            MESSAGE_VALUE_1ETH.sub(MINIMUM_FEE),
+            0n,
+            MESSAGE_VALUE_1ETH - MINIMUM_FEE,
             1,
             "0x",
             messageHash,
@@ -521,8 +508,8 @@ describe("L2MessageService", () => {
 
         const postRateLimitUsed = await l2MessageService.currentPeriodAmountInWei();
 
-        await expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
-        expect(await postRateLimitUsed).to.be.gt(initialRateLimitUsed);
+        expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
+        expect(postRateLimitUsed).to.be.gt(initialRateLimitUsed);
       });
     });
   });
@@ -579,14 +566,19 @@ describe("L2MessageService", () => {
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await expect(
           l2MessageService.claimMessage(
@@ -600,28 +592,28 @@ describe("L2MessageService", () => {
           ),
         )
           .to.emit(l2MessageService, "MessageClaimed")
-          .withArgs(ethers.utils.keccak256(expectedBytes));
+          .withArgs(ethers.keccak256(expectedBytes));
       });
 
       it("Should fail when the message hash does not exist", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           EMPTY_CALLDATA,
         );
 
-        const messageHash = ethers.utils.keccak256(expectedBytes);
+        const messageHash = ethers.keccak256(expectedBytes);
 
         await expect(
           l2MessageService.claimMessage(
-            l2MessageService.address,
+            await l2MessageService.getAddress(),
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
-            ethers.constants.AddressZero,
+            ethers.ZeroAddress,
             EMPTY_CALLDATA,
             1,
           ),
@@ -636,17 +628,22 @@ describe("L2MessageService", () => {
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           EMPTY_CALLDATA,
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
-        const postmanBalance = await postmanAddress.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
@@ -658,8 +655,10 @@ describe("L2MessageService", () => {
           1,
         );
         // greater due to the gas refund
-        expect(await notAuthorizedAccount.getBalance()).to.be.greaterThan(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await postmanAddress.getBalance()).to.be.greaterThan(postmanBalance);
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.greaterThan(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.greaterThan(postmanBalance);
       });
 
       it("Should execute the claim message and send fees to recipient contract and no leftovers", async () => {
@@ -668,23 +667,28 @@ describe("L2MessageService", () => {
 
         const expectedBytes = await encodeSendMessage(
           admin.address,
-          testContract.address,
+          await testContract.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           EMPTY_CALLDATA,
         );
 
-        const postmanBalance = await postmanAddress.getBalance();
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
-          testContract.address,
+          await testContract.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           postmanAddress.address,
@@ -692,8 +696,8 @@ describe("L2MessageService", () => {
           1,
         );
         // greater due to the gas refund
-        expect(await ethers.provider.getBalance(testContract.address)).to.be.equal(MESSAGE_VALUE_1ETH);
-        expect(await postmanAddress.getBalance()).to.be.equal(postmanBalance.add(MESSAGE_FEE));
+        expect(await ethers.provider.getBalance(await testContract.getAddress())).to.be.equal(MESSAGE_VALUE_1ETH);
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.equal(postmanBalance + MESSAGE_FEE);
       });
 
       it("Should execute the claim message and send the fees to set recipient, and NOT refund fee to EOA", async () => {
@@ -702,17 +706,22 @@ describe("L2MessageService", () => {
           notAuthorizedAccount.address,
           LOW_NO_REFUND_MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           EMPTY_CALLDATA,
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
-        const postmanBalance = await postmanAddress.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
@@ -726,8 +735,12 @@ describe("L2MessageService", () => {
         );
 
         // greater due to the gas refund
-        expect(await notAuthorizedAccount.getBalance()).to.be.equal(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await postmanAddress.getBalance()).to.be.equal(postmanBalance.add(LOW_NO_REFUND_MESSAGE_FEE));
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.equal(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.equal(
+          postmanBalance + LOW_NO_REFUND_MESSAGE_FEE,
+        );
       });
 
       it("Should execute the claim message and send fees to EOA with calldata and no refund sent", async () => {
@@ -736,17 +749,22 @@ describe("L2MessageService", () => {
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x123456789a",
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
-        const postmanBalance = await postmanAddress.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
@@ -758,72 +776,88 @@ describe("L2MessageService", () => {
           1,
         );
         // greater due to the gas refund
-        expect(await notAuthorizedAccount.getBalance()).to.be.equal(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await postmanAddress.getBalance()).to.be.equal(postmanBalance.add(MESSAGE_FEE));
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.equal(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.equal(postmanBalance + MESSAGE_FEE);
       });
 
       it("Should execute the claim message and no fees to EOA with calldata and no refund sent", async () => {
         const expectedBytes = await encodeSendMessage(
           admin.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x123456789a",
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
-        const postmanBalance = await postmanAddress.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           MESSAGE_VALUE_1ETH,
           postmanAddress.address,
           "0x123456789a",
           1,
         );
         // greater due to the gas refund
-        expect(await notAuthorizedAccount.getBalance()).to.be.equal(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await postmanAddress.getBalance()).to.be.equal(postmanBalance);
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.equal(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.equal(postmanBalance);
       });
 
       it("Should execute the claim message and no fees to EOA with no calldata and no refund sent", async () => {
         const expectedBytes = await encodeSendMessage(
           admin.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           EMPTY_CALLDATA,
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
-        const postmanBalance = await postmanAddress.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
+        const postmanBalance = await ethers.provider.getBalance(postmanAddress.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
           admin.address,
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           MESSAGE_VALUE_1ETH,
           postmanAddress.address,
           EMPTY_CALLDATA,
           1,
         );
         // greater due to the gas refund
-        expect(await notAuthorizedAccount.getBalance()).to.be.equal(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await postmanAddress.getBalance()).to.be.equal(postmanBalance);
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.equal(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(postmanAddress.address)).to.be.equal(postmanBalance);
       });
 
       // todo - add tests for refund checks when gas is lower
@@ -845,21 +879,26 @@ describe("L2MessageService", () => {
 
       it("Should fail when the message hash has been claimed", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await l2MessageService.claimMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
@@ -869,7 +908,7 @@ describe("L2MessageService", () => {
         );
         await expect(
           l2MessageService.claimMessage(
-            l2MessageService.address,
+            await l2MessageService.getAddress(),
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
@@ -882,62 +921,67 @@ describe("L2MessageService", () => {
 
       it("Should execute the claim message and send the fees to msg.sender", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
 
         const expectedSecondBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(2),
+          2n,
           "0x",
         );
 
-        const destinationBalance = await notAuthorizedAccount.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes), ethers.utils.keccak256(expectedSecondBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes), ethers.keccak256(expectedSecondBytes)];
+        const expectedRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, expectedBytesArray);
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 3, expectedRollingHash);
 
         await l2MessageService
           .connect(admin)
           .claimMessage(
-            l2MessageService.address,
+            await l2MessageService.getAddress(),
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
-            ethers.constants.AddressZero,
+            ethers.ZeroAddress,
             "0x",
             1,
           );
 
-        const adminBalance = await admin.getBalance();
+        const adminBalance = await ethers.provider.getBalance(admin.address);
 
         await l2MessageService
           .connect(admin)
           .claimMessage(
-            l2MessageService.address,
+            await l2MessageService.getAddress(),
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
-            ethers.constants.AddressZero,
+            ethers.ZeroAddress,
             "0x",
             2,
           );
 
-        expect(await notAuthorizedAccount.getBalance()).to.be.greaterThan(
-          destinationBalance.add(MESSAGE_VALUE_1ETH).add(MESSAGE_VALUE_1ETH),
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.greaterThan(
+          destinationBalance + MESSAGE_VALUE_1ETH + MESSAGE_VALUE_1ETH,
         );
-        expect(await admin.getBalance()).to.be.lessThan(adminBalance.add(MESSAGE_FEE));
+        expect(await ethers.provider.getBalance(admin.address)).to.be.lessThan(adminBalance + MESSAGE_FEE);
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_CLAIMED,
         );
       });
@@ -946,37 +990,44 @@ describe("L2MessageService", () => {
 
       it("Should execute the claim message when there are no fees", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           notAuthorizedAccount.address,
-          BigNumber.from(0),
+          0n,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
-        const destinationBalance = await notAuthorizedAccount.getBalance();
+        const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
 
-        const adminBalance = await admin.getBalance();
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
+
+        const adminBalance = await ethers.provider.getBalance(admin.address);
         await l2MessageService
           .connect(admin)
           .claimMessage(
-            l2MessageService.address,
+            await l2MessageService.getAddress(),
             notAuthorizedAccount.address,
             0,
             MESSAGE_VALUE_1ETH,
-            ethers.constants.AddressZero,
+            ethers.ZeroAddress,
             "0x",
             1,
           );
 
-        expect(await notAuthorizedAccount.getBalance()).to.be.equal(destinationBalance.add(MESSAGE_VALUE_1ETH));
-        expect(await admin.getBalance()).to.be.lessThan(adminBalance);
+        expect(await ethers.provider.getBalance(notAuthorizedAccount.address)).to.be.equal(
+          destinationBalance + MESSAGE_VALUE_1ETH,
+        );
+        expect(await ethers.provider.getBalance(admin.address)).to.be.lessThan(adminBalance);
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_CLAIMED,
         );
       });
@@ -985,66 +1036,75 @@ describe("L2MessageService", () => {
         const sendCalldata = generateKeccak256Hash("setSender()").substring(0, 10);
 
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
+          await l2MessageService.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           sendCalldata,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         const storedSenderBeforeSending = await l2MessageService.originalSender();
-        expect(storedSenderBeforeSending).to.be.equal(ethers.constants.AddressZero);
+        expect(storedSenderBeforeSending).to.be.equal(ethers.ZeroAddress);
 
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
+              await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.constants.AddressZero,
+              ethers.ZeroAddress,
               sendCalldata,
               1,
             ),
         ).to.not.be.reverted;
 
         const newSender = await l2MessageService.originalSender();
-        expect(newSender).to.be.equal(l2MessageService.address);
+        expect(newSender).to.be.equal(await l2MessageService.getAddress());
       });
 
       it("Should fail on reentry when sending to recipient", async () => {
         const callSignature = generateKeccak256Hash("doReentry()").substring(0, 10);
 
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
+          await l2MessageService.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           callSignature,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
 
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
+              await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.constants.AddressZero,
+              ethers.ZeroAddress,
               callSignature,
               1,
             ),
@@ -1053,140 +1113,160 @@ describe("L2MessageService", () => {
 
       it("Should fail when the destination errors through receive", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
+          await l2MessageService.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
+              await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.constants.AddressZero,
+              ethers.ZeroAddress,
               "0x",
               1,
             ),
         ).to.be.reverted;
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
         );
       });
 
       it("Should fail when the destination errors through fallback", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
+          await l2MessageService.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x1234",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
+              await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.constants.AddressZero,
+              ethers.ZeroAddress,
               "0x1234",
               1,
             ),
         ).to.be.reverted;
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
         );
       });
 
       it("Should fail when the destination errors on empty receive (makeItReceive function)", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
+          await l2MessageService.getAddress(),
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0xfc13b6f3",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
+              await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.constants.AddressZero,
+              ethers.ZeroAddress,
               "0xfc13b6f3",
               1,
             ),
         )
           .to.be.revertedWithCustomError(l2MessageService, "MessageSendingFailed")
-          .withArgs(l2MessageService.address);
+          .withArgs(await l2MessageService.getAddress());
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
         );
       });
 
       it("Should fail when the fee recipient fails errors", async () => {
         const expectedBytes = await encodeSendMessage(
-          l2MessageService.address,
+          await l2MessageService.getAddress(),
           admin.address,
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
-          BigNumber.from(1),
+          1n,
           "0x",
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
 
-        const expectedBytesArray = [ethers.utils.keccak256(expectedBytes)];
-        await l2MessageService.connect(l1l2MessageSetter).addL1L2MessageHashes(expectedBytesArray);
+        const expectedBytesArray = [ethers.keccak256(expectedBytes)];
+        const expectedRollingHash = calculateRollingHash(ethers.ZeroHash, ethers.keccak256(expectedBytes));
+
+        await l2MessageService.setLastAnchoredL1MessageNumber(1);
+        await l2MessageService
+          .connect(l1l2MessageSetter)
+          .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         await expect(
           l2MessageService
             .connect(admin)
             .claimMessage(
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
               admin.address,
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              l2MessageService.address,
+              await l2MessageService.getAddress(),
               "0x",
               1,
             ),
         )
           .to.be.revertedWithCustomError(l2MessageService, "FeePaymentFailed")
-          .withArgs(l2MessageService.address);
+          .withArgs(await l2MessageService.getAddress());
 
-        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.utils.keccak256(expectedBytes))).to.be.equal(
+        expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
         );
       });

@@ -1,14 +1,14 @@
-import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { deployUpgradableWithAbiAndByteCode, requireEnv } from "../scripts/hardhat/utils";
+import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
-import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 
-import { abi, bytecode } from "./V1/ZkEvmV2Deployed.json";
+import fs from "fs";
 import { ethers } from "hardhat";
 import path from "path";
-import fs from "fs";
+import { abi, bytecode } from "./V1/ZkEvmV2Deployed.json";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
@@ -77,11 +77,17 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     },
   );
 
-  console.log(`${contractName} deployed at ${contract.address}`);
+  const contractAddress = await contract.getAddress();
+  const txReceipt = await contract.deploymentTransaction()?.wait();
+  if (!txReceipt) {
+    throw "Contract deployment transaction receipt not found.";
+  }
 
-  await tryStoreAddress(hre.network.name, contractName, contract.address, contract.deployTransaction.hash);
+  console.log(`${contractName} deployed at ${contractAddress}`);
 
-  await tryVerifyContract(contract.address);
+  await tryStoreAddress(hre.network.name, contractName, contractAddress, txReceipt.hash);
+
+  await tryVerifyContract(contractAddress);
 
   fs.unlinkSync(path.join(hre.config.paths.cache, "validations.json"));
   if (fs.existsSync(validationFileBackupPath)) {

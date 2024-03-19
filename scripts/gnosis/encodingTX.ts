@@ -27,26 +27,19 @@ const main = async () => {
 
   console.log("upgradeCallWithReinitSystemMigrationBlock", upgradeCallWithReinitSystemMigrationBlock);
 
-  const upgradeCallUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallUsingSecurityCouncil = ethers.concat([
     "0x99a88ec4",
-    ethers.utils.defaultAbiCoder.encode(["address", "address"], [proxyContract, NewImplementation]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["address", "address"], [proxyContract, NewImplementation]),
   ]);
 
   console.log("Encoded Tx Schedule Upgrade from Security Council :", "\n", upgradeCallUsingSecurityCouncil);
   console.log("\n");
 
-  const upgradeScheduleCallwithZodiac = ethers.utils.hexConcat([
+  const upgradeScheduleCallwithZodiac = ethers.concat([
     "0x01d5062a",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "uint256", "bytes", "bytes32", "bytes32", "uint256"],
-      [
-        proxyAdminContract,
-        0,
-        upgradeCallUsingSecurityCouncil,
-        ethers.constants.HashZero,
-        ethers.constants.HashZero,
-        delay,
-      ],
+      [proxyAdminContract, 0, upgradeCallUsingSecurityCouncil, ethers.ZeroHash, ethers.ZeroHash, delay],
     ),
   ]);
 
@@ -61,9 +54,9 @@ const main = async () => {
   );
   console.log("\n");
 
-  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.utils.hexConcat([
+  const upgradeCallWithReinitializationUsingSecurityCouncil = ethers.concat([
     "0x9623609d",
-    ethers.utils.defaultAbiCoder.encode(
+    ethers.AbiCoder.defaultAbiCoder().encode(
       ["address", "address", "bytes"],
       [
         proxyContract,
@@ -83,41 +76,41 @@ const main = async () => {
   );
   console.log("\n");
 
-  const encodeGrantRole = ethers.utils.hexConcat([
+  const encodeGrantRole = ethers.concat([
     "0x2f2ff15d",
-    ethers.utils.defaultAbiCoder.encode(["bytes32", "address"], [OPERATOR_ROLE, accountGrantRevokeRole]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "address"], [OPERATOR_ROLE, accountGrantRevokeRole]),
   ]);
 
   console.log("encodeGrantRole:", "\n", encodeGrantRole);
   console.log("\n");
 
-  const encodeRevokeRole = ethers.utils.hexConcat([
+  const encodeRevokeRole = ethers.concat([
     "0xd547741f",
-    ethers.utils.defaultAbiCoder.encode(["bytes32", "address"], [OPERATOR_ROLE, accountGrantRevokeRole]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "address"], [OPERATOR_ROLE, accountGrantRevokeRole]),
   ]);
 
   console.log("encodeRevokeRole:", "\n", encodeRevokeRole);
   console.log("\n");
 
-  const encodePauseByType = ethers.utils.hexConcat([
+  const encodePauseByType = ethers.concat([
     "0x8264bd82",
-    ethers.utils.defaultAbiCoder.encode(["bytes32"], [pauseType]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["bytes32"], [pauseType]),
   ]);
 
   console.log("encodePauseByType:", "\n", encodePauseByType);
   console.log("\n");
 
-  const encodeResetLimitAmount = ethers.utils.hexConcat([
+  const encodeResetLimitAmount = ethers.concat([
     "0x557eac73",
-    ethers.utils.defaultAbiCoder.encode(["uint256"], [rateLimitAmount]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [rateLimitAmount]),
   ]);
 
   console.log("encodeResetLimitAmount:", "\n", encodeResetLimitAmount);
   console.log("\n");
 
-  const encodeSetMinimumFee = ethers.utils.hexConcat([
+  const encodeSetMinimumFee = ethers.concat([
     "0x182a7506",
-    ethers.utils.defaultAbiCoder.encode(["uint256"], [minimumFee]),
+    ethers.AbiCoder.defaultAbiCoder().encode(["uint256"], [minimumFee]),
   ]);
 
   console.log("encodeSetMinimumFee:", "\n", encodeSetMinimumFee);
