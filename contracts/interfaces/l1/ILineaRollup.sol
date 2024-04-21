@@ -92,7 +92,7 @@ interface ILineaRollup {
   );
 
   /**
-   * @notice Emitted when compressed data is being submitted and verified succesfully on L1.
+   * @notice Emitted when compressed data is being submitted and verified successfully on L1.
    * @param dataHash The indexed data hash for the data being submitted.
    * @param startBlock The indexed L2 block number indicating which block the data starts from.
    * @param endBlock The indexed L2 block number indicating which block the data ends on.
