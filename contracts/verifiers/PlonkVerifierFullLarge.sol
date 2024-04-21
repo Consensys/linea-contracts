@@ -245,7 +245,7 @@ contract PlonkVerifierFullLarge {
       }
 
       /// Called when one the openings is bigger than r
-      /// The openings are the claimed evalutions of a polynomial
+      /// The openings are the claimed evaluations of a polynomial
       /// in a Kzg proof.
       function error_proof_openings_size() {
         let ptError := mload(0x40)

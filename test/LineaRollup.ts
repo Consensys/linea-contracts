@@ -284,7 +284,7 @@ describe("Linea Rollup contract", () => {
       ).to.be.revertedWithCustomError(lineaRollup, "EmptySubmissionData");
     });
 
-    it("Should succesfully submit 1 compressed data chunk setting values", async () => {
+    it("Should successfully submit 1 compressed data chunk setting values", async () => {
       const [submissionData] = generateCallDataSubmission(0, 1);
 
       await expect(lineaRollup.connect(operator).submitData(submissionData, { gasLimit: 30_000_000 })).to.not.be
@@ -297,7 +297,7 @@ describe("Linea Rollup contract", () => {
       expect(foundShnarf).to.be.equal(expectedShnarf);
     });
 
-    it("Should succesfully submit 2 compressed data chunks in two transactions", async () => {
+    it("Should successfully submit 2 compressed data chunks in two transactions", async () => {
       const [firstSubmissionData, secondSubmissionData] = generateCallDataSubmission(0, 2);
       await expect(lineaRollup.connect(operator).submitData(firstSubmissionData, { gasLimit: 30_000_000 })).to.not.be
         .reverted;

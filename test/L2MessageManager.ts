@@ -149,7 +149,7 @@ describe("L2MessageManager", () => {
       ).to.revertedWithCustomError(l2MessageManager, "FinalRollingHashIsZero");
     });
 
-    it("Should revert the with mistmatched hashes", async () => {
+    it("Should revert the with mismatched hashes", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
       const badRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes);
 
@@ -164,7 +164,7 @@ describe("L2MessageManager", () => {
         .withArgs(badRollingHash, foundRollingHash);
     });
 
-    it("Should revert the with mistmatched counts", async () => {
+    it("Should revert the with mismatched counts", async () => {
       const messageHashes = generateNKeccak256Hashes("message", 100);
 
       const foundRollingHash = calculateRollingHashFromCollection(ethers.ZeroHash, messageHashes.slice(0, 99));
