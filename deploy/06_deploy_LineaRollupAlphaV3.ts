@@ -1,31 +1,17 @@
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
-import { deployUpgradableWithAbiAndByteCode, requireEnv } from "../scripts/hardhat/utils";
+import { requireEnv } from "../scripts/hardhat/utils";
 import { validateDeployBranchAndTags } from "../utils/auditedDeployVerifier";
 import { getDeployedContractAddress, tryStoreAddress } from "../utils/storeAddress";
 import { tryVerifyContract } from "../utils/verifyContract";
-
-import fs from "fs";
-import { ethers } from "hardhat";
-import path from "path";
-import { abi, bytecode } from "./V1/ZkEvmV2Deployed.json";
+import { deployUpgradableContractWithProxyAdmin } from "contracts/utils/deployments";
+import { LineaRollupAlphaV3__factory } from "../typechain-types";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployments } = hre;
   validateDeployBranchAndTags(hre.network.name);
 
-  const mainnetDeployedZkEvmCacheFolder = path.resolve("./deploy/V1/ZkEvmV2Cache/");
-
-  const validationFilePath = path.join(hre.config.paths.cache, "validations.json");
-  const validationFileBackupPath = path.join(hre.config.paths.cache, "validations_backup.json");
-
-  if (fs.existsSync(validationFilePath)) {
-    fs.copyFileSync(validationFilePath, validationFileBackupPath);
-  }
-
-  fs.copyFileSync(path.join(mainnetDeployedZkEvmCacheFolder, "validations.json"), validationFilePath);
-
-  const contractName = "ZkEvmV2Mainnet";
+  const contractName = "LineaRollupAlphaV3";
   const verifierName = "PlonkVerifier";
   const existingContractAddress = await getDeployedContractAddress(contractName, deployments);
   let verifierAddress = await getDeployedContractAddress(verifierName, deployments);
@@ -47,22 +33,21 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const LineaRollup_operators = requireEnv("LINEA_ROLLUP_OPERATORS");
   const LineaRollup_rateLimitPeriodInSeconds = requireEnv("LINEA_ROLLUP_RATE_LIMIT_PERIOD");
   const LineaRollup_rateLimitAmountInWei = requireEnv("LINEA_ROLLUP_RATE_LIMIT_AMOUNT");
+  const LineaRollup_genesisTimestamp = requireEnv("LINEA_ROLLUP_GENESIS_TIMESTAMP");
 
   console.log(`Setting operators ${LineaRollup_operators}`);
-
-  const [deployer] = await ethers.getSigners();
 
   if (existingContractAddress === undefined) {
     console.log(`Deploying initial version, NB: the address will be saved if env SAVE_ADDRESS=true.`);
   } else {
     console.log(`Deploying new version, NB: ${existingContractAddress} will be overwritten if env SAVE_ADDRESS=true.`);
   }
-  const contract = await deployUpgradableWithAbiAndByteCode(
-    deployer,
-    "ZkEvmV2Mainnet",
-    JSON.stringify(abi),
-    bytecode,
-    [
+
+  const [deployer] = await hre.ethers.getSigners();
+
+  const contract = await deployUpgradableContractWithProxyAdmin(new LineaRollupAlphaV3__factory(), deployer, {
+    functionName: "initialize",
+    args: [
       LineaRollup_initialStateRootHash,
       LineaRollup_initialL2BlockNumber,
       verifierAddress,
@@ -70,12 +55,9 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       LineaRollup_operators?.split(","),
       LineaRollup_rateLimitPeriodInSeconds,
       LineaRollup_rateLimitAmountInWei,
+      LineaRollup_genesisTimestamp,
     ],
-    {
-      initializer: "initialize(bytes32,uint256,address,address,address[],uint256,uint256)",
-      unsafeAllow: ["constructor"],
-    },
-  );
+  });
 
   const contractAddress = await contract.getAddress();
   const txReceipt = await contract.deploymentTransaction()?.wait();
@@ -83,18 +65,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     throw "Contract deployment transaction receipt not found.";
   }
 
-  console.log(`${contractName} deployed at ${contractAddress}`);
+  console.log(`${contractName} deployed: address=${contractAddress} blockNumber=${txReceipt.blockNumber}`);
 
   await tryStoreAddress(hre.network.name, contractName, contractAddress, txReceipt.hash);
 
   await tryVerifyContract(contractAddress);
-
-  fs.unlinkSync(path.join(hre.config.paths.cache, "validations.json"));
-  if (fs.existsSync(validationFileBackupPath)) {
-    fs.copyFileSync(validationFileBackupPath, validationFilePath);
-    fs.unlinkSync(validationFileBackupPath);
-  }
 };
 
 export default func;
-func.tags = ["ZkEvmV2Mainnet"];
+func.tags = ["LineaRollupAlphaV3"];

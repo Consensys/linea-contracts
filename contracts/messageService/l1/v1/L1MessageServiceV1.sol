@@ -2,11 +2,12 @@
 pragma solidity 0.8.24;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import { PauseManager } from "../../lib/PauseManager.sol";
 import { RateLimiter } from "../../lib/RateLimiter.sol";
 import { L1MessageManagerV1 } from "./L1MessageManagerV1.sol";
+import { TransientStorageReentrancyGuardUpgradeable } from "../TransientStorageReentrancyGuardUpgradeable.sol";
 import { IMessageService } from "../../../interfaces/IMessageService.sol";
+import { TransientStorageHelpers } from "../../lib/TransientStorageHelpers.sol";
 
 /**
  * @title Contract to manage cross-chain messaging on L1.
@@ -17,13 +18,14 @@ abstract contract L1MessageServiceV1 is
   Initializable,
   RateLimiter,
   L1MessageManagerV1,
-  ReentrancyGuardUpgradeable,
+  TransientStorageReentrancyGuardUpgradeable,
   PauseManager,
   IMessageService
 {
   // @dev This is initialised to save user cost with existing slot.
   uint256 public nextMessageNumber;
 
+  /// @dev DEPRECATED in favor of new transient storage with `MESSAGE_SENDER_TRANSIENT_KEY` key.
   address internal _messageSender;
 
   /// @dev Total contract storage is 52 slots including the gap below.
@@ -33,7 +35,10 @@ abstract contract L1MessageServiceV1 is
   /// @dev adding these should not affect storage as they are constants and are stored in bytecode.
   uint256 internal constant REFUND_OVERHEAD_IN_GAS = 48252;
 
-  address internal constant DEFAULT_SENDER_ADDRESS = address(123456789);
+  bytes32 internal constant MESSAGE_SENDER_TRANSIENT_KEY =
+    bytes32(uint256(keccak256("eip1967.message.sender.transient.key")) - 1);
+
+  address internal constant DEFAULT_MESSAGE_SENDER_TRANSIENT_VALUE = address(0);
 
   /**
    * @notice The unspent fee is refunded if applicable.
@@ -111,14 +116,15 @@ abstract contract L1MessageServiceV1 is
   ) external nonReentrant distributeFees(_fee, _to, _calldata, _feeRecipient) {
     _requireTypeAndGeneralNotPaused(L2_L1_PAUSE_TYPE);
 
+    /// @dev This is placed earlier to fix the stack issue by using these two earlier on.
+    TransientStorageHelpers.tstoreAddress(MESSAGE_SENDER_TRANSIENT_KEY, _from);
+
     bytes32 messageHash = keccak256(abi.encode(_from, _to, _fee, _value, _nonce, _calldata));
 
     // @dev Status check and revert is in the message manager.
     _updateL2L1MessageStatusToClaimed(messageHash);
 
     _addUsedAmount(_fee + _value);
-
-    _messageSender = _from;
 
     (bool callSuccess, bytes memory returnData) = _to.call{ value: _value }(_calldata);
     if (!callSuccess) {
@@ -132,7 +138,7 @@ abstract contract L1MessageServiceV1 is
       }
     }
 
-    _messageSender = DEFAULT_SENDER_ADDRESS;
+    TransientStorageHelpers.tstoreAddress(MESSAGE_SENDER_TRANSIENT_KEY, DEFAULT_MESSAGE_SENDER_TRANSIENT_VALUE);
 
     emit MessageClaimed(messageHash);
   }

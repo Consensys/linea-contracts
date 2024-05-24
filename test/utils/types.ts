@@ -34,12 +34,30 @@ export type DebugData = {
 };
 
 export type SubmissionData = {
-  parentStateRootHash: string;
-  dataParentHash: string;
   finalStateRootHash: string;
   firstBlockInData: bigint;
   finalBlockInData: bigint;
   snarkHash: string;
+};
+
+export type ParentSubmissionData = {
+  finalStateRootHash: string;
+  firstBlockInData: bigint;
+  finalBlockInData: bigint;
+  shnarf: string;
+};
+
+export type ParentAndExpectedShnarf = {
+  parentShnarf: string;
+  expectedShnarf: string;
+};
+
+export type ShnarfData = {
+  parentShnarf: string;
+  snarkHash: string;
+  finalStateRootHash: string;
+  dataEvaluationPoint: string;
+  dataEvaluationClaim: string;
 };
 
 export type CalldataSubmissionData = SubmissionData & {
@@ -53,10 +71,10 @@ export type SubmissionAndCompressedData = {
 
 export type FinalizationData = {
   aggregatedProof: string;
+  finalBlockInData: bigint;
+  lastFinalizedShnarf: string;
+  shnarfData: ShnarfData;
   parentStateRootHash: string;
-  dataHashes: string[];
-  dataParentHash: string;
-  finalBlockNumber: bigint;
   lastFinalizedTimestamp: bigint;
   finalTimestamp: bigint;
   l1RollingHash: string;
@@ -64,4 +82,6 @@ export type FinalizationData = {
   l2MerkleRoots: string[];
   l2MerkleTreesDepth: bigint;
   l2MessagingBlocksOffsets: string;
+  lastFinalizedL1RollingHash: string;
+  lastFinalizedL1RollingHashMessageNumber: bigint;
 };

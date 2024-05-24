@@ -8,12 +8,17 @@ const UNCHANGED_COLOR = "grey";
 const MAX_UNCHANGED_PART_LEN = 100;
 
 const EXPOSED_CONTRACTS = ["L2MessageService", "LineaRollup", "TimeLock"];
+const CONTRACT_OUPUT_ABIS: { [contractName: string]: string } = {
+  L2MessageService: "L2MessageService.abi",
+  LineaRollup: "LineaRollupAlphaV4.abi",
+  TimeLock: "TimeLock.abi",
+};
 
 async function main() {
   const checkOnly = process.env.CHECK_ONLY === "1";
 
   for (const contract of EXPOSED_CONTRACTS) {
-    const abiPath = path.resolve("abi", contract + ".abi");
+    const abiPath = path.resolve("abi", CONTRACT_OUPUT_ABIS[contract]);
 
     if (checkOnly) {
       const currentAbi = JSON.parse(fs.readFileSync(abiPath, "utf8"));

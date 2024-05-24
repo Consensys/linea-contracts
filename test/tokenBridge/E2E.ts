@@ -5,6 +5,7 @@ import { ethers } from "hardhat";
 import { deployTokenBridgeWithMockMessaging } from "../../scripts/tokenBridge/test/deployTokenBridges";
 import { deployTokens } from "../../scripts/tokenBridge/test/deployTokens";
 import { BridgedToken, ERC20Fees, MockERC20MintBurn } from "../../typechain-types";
+import { expectEvent, expectRevertWithCustomError, expectRevertWithReason } from "../utils/helpers";
 
 const initialUserBalance = BigInt(10 ** 9);
 const RESERVED_STATUS = ethers.getAddress("0x0000000000000000000000000000000000000111");
@@ -92,9 +93,11 @@ describe("E2E tests", function () {
       const l2Token = BridgedToken.attach(l2TokenAddress) as BridgedToken;
 
       expect(await l2Token.allowance(user.address, await l2TokenBridge.getAddress())).to.be.equal(0);
-      await expect(
+
+      await expectRevertWithReason(
         l2TokenBridge.connect(user).bridgeToken(l2TokenAddress, secondBridgeAmount, user.address),
-      ).to.be.revertedWith("ERC20: insufficient allowance");
+        "ERC20: insufficient allowance",
+      );
 
       await l2Token.connect(user).approve(await l2TokenBridge.getAddress(), secondBridgeAmount);
       await l2TokenBridge.connect(user).bridgeToken(l2TokenAddress, secondBridgeAmount, user.address);
@@ -145,18 +148,23 @@ describe("E2E tests", function () {
       } = await loadFixture(deployContractsFixture);
       const bridgeAmount = 0;
 
-      await expect(
+      await expectRevertWithCustomError(
+        l1TokenBridge,
         l1TokenBridge.connect(user).bridgeToken(await L1DAI.getAddress(), bridgeAmount, user.address),
-      ).to.be.revertedWithCustomError(l1TokenBridge, "ZeroAmountNotAllowed");
+        "ZeroAmountNotAllowed",
+        [bridgeAmount],
+      );
     });
 
     it("Should not be able to bridge if token is the 0 address", async function () {
       const { user, l1TokenBridge } = await loadFixture(deployContractsFixture);
       const bridgeAmount = 10;
 
-      await expect(
+      await expectRevertWithCustomError(
+        l1TokenBridge,
         l1TokenBridge.connect(user).bridgeToken(ethers.ZeroAddress, bridgeAmount, user.address),
-      ).to.be.revertedWithCustomError(l1TokenBridge, "ZeroAddressNotAllowed");
+        "ZeroAddressNotAllowed",
+      );
     });
 
     it("Should create bridged token on the targeted layer even if both native tokens on both layers have the same address and are bridged at the same time", async function () {
@@ -301,6 +309,23 @@ describe("E2E tests", function () {
         expect(await l2Token.symbol()).to.be.equal("\u0001");
       });
 
+      it("Should revert if decimals are unknown.", async function () {
+        const { user, l1TokenBridge } = await loadFixture(deployContractsFixture);
+
+        const ERC20 = await ethers.getContractFactory("ERC20UnknownDecimals");
+        const noDecimalToken = await ERC20.deploy("Token with fee", "FEE");
+        const bridgeAmount = 1000;
+
+        await noDecimalToken.mint(user.address, bridgeAmount);
+        await noDecimalToken.connect(user).approve(await l1TokenBridge.getAddress(), bridgeAmount);
+
+        await expect(
+          l1TokenBridge.connect(user).bridgeToken(await noDecimalToken.getAddress(), bridgeAmount, user.address),
+        )
+          .to.be.revertedWithCustomError(l1TokenBridge, "DecimalsAreUnknown")
+          .withArgs(await noDecimalToken.getAddress());
+      });
+
       it("Should not revert if a token being bridged exists as a native token on the other layer", async function () {
         const {
           user,
@@ -359,7 +384,7 @@ describe("E2E tests", function () {
         user,
         l1TokenBridge,
         l2TokenBridge,
-        tokens: { L1USDT, L2UNI },
+        tokens: { L1USDT, L2UNI, L2SHIBA },
         chainIds,
       } = await loadFixture(deployContractsFixture);
       const amountBridged = 100;
@@ -369,21 +394,42 @@ describe("E2E tests", function () {
       const brigedToNativeContract = await l2TokenBridge.nativeToBridgedToken(chainIds[0], await L1USDT.getAddress());
 
       // Try to set custom contract with a bridgedTokenContract, should revert
-      await expect(
+      await expectRevertWithCustomError(
+        l2TokenBridge,
         l2TokenBridge.setCustomContract(await L2UNI.getAddress(), brigedToNativeContract),
-      ).to.be.revertedWithCustomError(l2TokenBridge, "AlreadyBrigedToNativeTokenSet");
+        "AlreadyBrigedToNativeTokenSet",
+        [brigedToNativeContract],
+      );
 
-      await expect(
+      const randomTokenAddress = await L2SHIBA.getAddress();
+
+      await expectRevertWithCustomError(
+        l2TokenBridge,
+        l2TokenBridge.setCustomContract(await L1USDT.getAddress(), randomTokenAddress),
+        "NativeToBridgedTokenAlreadySet",
+        [await L1USDT.getAddress()],
+      );
+
+      await expectRevertWithCustomError(
+        l2TokenBridge,
         l2TokenBridge.setCustomContract(await L2UNI.getAddress(), RESERVED_STATUS),
-      ).to.be.revertedWithCustomError(l2TokenBridge, "StatusAddressNotAllowed");
+        "StatusAddressNotAllowed",
+        [RESERVED_STATUS],
+      );
 
-      await expect(
+      await expectRevertWithCustomError(
+        l2TokenBridge,
         l2TokenBridge.setCustomContract(await L2UNI.getAddress(), NATIVE_STATUS),
-      ).to.be.revertedWithCustomError(l2TokenBridge, "StatusAddressNotAllowed");
+        "StatusAddressNotAllowed",
+        [NATIVE_STATUS],
+      );
 
-      await expect(
+      await expectRevertWithCustomError(
+        l2TokenBridge,
         l2TokenBridge.setCustomContract(await L2UNI.getAddress(), DEPLOYED_STATUS),
-      ).to.be.revertedWithCustomError(l2TokenBridge, "StatusAddressNotAllowed");
+        "StatusAddressNotAllowed",
+        [DEPLOYED_STATUS],
+      );
     });
   });
 
@@ -411,9 +457,13 @@ describe("E2E tests", function () {
         tokens: { L1DAI },
       } = await loadFixture(deployContractsFixture);
       await l1TokenBridge.connect(deployer).setReserved(await L1DAI.getAddress());
-      await expect(
+
+      await expectRevertWithCustomError(
+        l1TokenBridge,
         l1TokenBridge.connect(user).bridgeToken(await L1DAI.getAddress(), 1, user.address),
-      ).to.be.revertedWithCustomError(l1TokenBridge, "ReservedToken");
+        "ReservedToken",
+        [L1DAI.getAddress()],
+      );
     });
 
     it("Should only be possible to reserve a token if it has not been bridged before", async function () {
@@ -424,9 +474,12 @@ describe("E2E tests", function () {
         tokens: { L1DAI },
       } = await loadFixture(deployContractsFixture);
       l1TokenBridge.connect(user).bridgeToken(await L1DAI.getAddress(), 1, user.address);
-      await expect(l1TokenBridge.connect(deployer).setReserved(await L1DAI.getAddress())).to.be.revertedWithCustomError(
+
+      await expectRevertWithCustomError(
         l1TokenBridge,
+        l1TokenBridge.connect(deployer).setReserved(await L1DAI.getAddress()),
         "AlreadyBridgedToken",
+        [L1DAI.getAddress()],
       );
     });
   });
@@ -472,7 +525,8 @@ describe("E2E tests", function () {
       const messageService = await MessageServiceFactory.deploy();
       await messageService.waitForDeployment();
 
-      await expect(l1TokenBridge.connect(user).setMessageService(await messageService.getAddress())).to.be.revertedWith(
+      await expectRevertWithReason(
+        l1TokenBridge.connect(user).setMessageService(await messageService.getAddress()),
         "Ownable: caller is not the owner",
       );
     });
@@ -485,9 +539,13 @@ describe("E2E tests", function () {
       await messageService.waitForDeployment();
 
       const oldMessageService = await l1TokenBridge.messageService();
-      await expect(l1TokenBridge.setMessageService(await messageService.getAddress()))
-        .to.emit(l1TokenBridge, "MessageServiceUpdated")
-        .withArgs(await messageService.getAddress(), oldMessageService, deployer.address);
+
+      await expectEvent(
+        l1TokenBridge,
+        l1TokenBridge.setMessageService(await messageService.getAddress()),
+        "MessageServiceUpdated",
+        [await messageService.getAddress(), oldMessageService, deployer.address],
+      );
     });
   });
 
@@ -544,9 +602,13 @@ describe("E2E tests", function () {
       await l1TokenBridge.connect(user).bridgeToken(await L1DAI.getAddress(), bridgeAmount, user.address);
 
       const L2DAIBridgedAddress = await l2TokenBridge.nativeToBridgedToken(chainIds[0], await L1DAI.getAddress());
-      await expect(
+
+      await expectRevertWithCustomError(
+        l2TokenBridge,
         l2TokenBridge.confirmDeployment([L2DAIBridgedAddress, await L1USDT.getAddress()]),
-      ).to.be.revertedWithCustomError(l2TokenBridge, "TokenNotDeployed");
+        "TokenNotDeployed",
+        [L1USDT.getAddress()],
+      );
     });
 
     it("Should be able to bridge back to the original layer if that token is marked as DEPLOYED", async function () {

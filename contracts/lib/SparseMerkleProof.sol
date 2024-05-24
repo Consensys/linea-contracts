@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity 0.8.19;
+pragma solidity 0.8.24;
 
 import { Mimc } from "./Mimc.sol";
 
@@ -25,6 +25,7 @@ library SparseMerkleProof {
   error WrongBytesLength(uint256 expectedLength, uint256 bytesLength);
 
   uint256 internal constant TREE_DEPTH = 40;
+  bytes32 internal constant ZERO_HASH = 0x0;
 
   /**
    * @notice Format input and verify sparse merkle proof
@@ -140,19 +141,52 @@ library SparseMerkleProof {
    */
   function _formatProof(bytes[] calldata _rawProof) private pure returns (bytes32, bytes32, bytes32[] memory) {
     uint256 rawProofLength = _rawProof.length;
+    uint256 formattedProofLength = rawProofLength - 2;
 
-    bytes32[] memory proof = new bytes32[](rawProofLength - 2);
+    bytes32[] memory proof = new bytes32[](formattedProofLength);
     bytes32 nextFreeNode = bytes32(_rawProof[0][:32]);
     bytes32 leafHash = Mimc.hash(_rawProof[rawProofLength - 1]);
 
-    for (uint256 i = 1; i < rawProofLength - 1; ) {
-      proof[rawProofLength - 2 - i] = Mimc.hash(_rawProof[i]);
+    for (uint256 i = 1; i < formattedProofLength; ) {
+      proof[formattedProofLength - i] = Mimc.hash(_rawProof[i]);
       unchecked {
         ++i;
       }
     }
 
+    // If the sibling leaf (_rawProof[formattedProofLength]) is equal to zero bytes we don't hash it
+    if (_isZeroBytes(_rawProof[formattedProofLength])) {
+      proof[0] = ZERO_HASH;
+    } else {
+      proof[0] = Mimc.hash(_rawProof[formattedProofLength]);
+    }
+
     return (nextFreeNode, leafHash, proof);
+  }
+
+  /**
+   * @notice Check if bytes contain only zero byte elements
+   * @param _data Bytes to be checked
+   * @return isZeroBytes true if bytes contain only zero byte elements, false otherwise
+   */
+  function _isZeroBytes(bytes calldata _data) private pure returns (bool isZeroBytes) {
+    isZeroBytes = true;
+    assembly {
+      let dataStart := _data.offset
+
+      for {
+        let currentPtr := dataStart
+      } lt(currentPtr, add(dataStart, _data.length)) {
+        currentPtr := add(currentPtr, 0x20)
+      } {
+        let dataWord := calldataload(currentPtr)
+
+        if eq(iszero(dataWord), 0) {
+          isZeroBytes := 0
+          break
+        }
+      }
+    }
   }
 
   /**
@@ -173,13 +207,9 @@ library SparseMerkleProof {
     bytes32 computedHash = _leafHash;
     uint256 currentIndex = _leafIndex;
 
-    for (uint256 height; height < TREE_DEPTH; ) {
+    for (uint256 height; height < TREE_DEPTH; ++height) {
       if ((currentIndex >> height) & 1 == 1) computedHash = Mimc.hash(abi.encodePacked(_proof[height], computedHash));
       else computedHash = Mimc.hash(abi.encodePacked(computedHash, _proof[height]));
-
-      unchecked {
-        ++height;
-      }
     }
 
     return Mimc.hash(abi.encodePacked(_nextFreeNode, computedHash)) == _root;

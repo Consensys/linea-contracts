@@ -6,15 +6,26 @@ import { L1MessageService } from "./messageService/l1/L1MessageService.sol";
 import { ZkEvmV2 } from "./ZkEvmV2.sol";
 import { ILineaRollup } from "./interfaces/l1/ILineaRollup.sol";
 
+import { Utils } from "./lib/Utils.sol";
 /**
- * @title Contract to manage cross-chain messaging on L1 and rollup proving.
+ * @title Contract to manage cross-chain messaging on L1, L2 data submission, and rollup proof verification.
  * @author ConsenSys Software Inc.
  * @custom:security-contact security-report@linea.build
  */
 contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILineaRollup {
+  using Utils for *;
+
   bytes32 public constant VERIFIER_SETTER_ROLE = keccak256("VERIFIER_SETTER_ROLE");
   bytes32 public constant GENESIS_SHNARF =
-    keccak256("0x0000000000000000000000000000000000000000000000000000000000000000");
+    keccak256(
+      abi.encode(
+        EMPTY_HASH,
+        EMPTY_HASH,
+        0x072ead6777750dc20232d1cee8dc9a395c2d350df4bbaa5096c6f59b214dcecd,
+        EMPTY_HASH,
+        EMPTY_HASH
+      )
+    );
 
   bytes32 internal constant EMPTY_HASH = 0x0;
   uint256 internal constant BLS_CURVE_MODULUS =
@@ -23,17 +34,33 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
   uint256 internal constant POINT_EVALUATION_RETURN_DATA_LENGTH = 64;
   uint256 internal constant POINT_EVALUATION_FIELD_ELEMENTS_LENGTH = 4096;
 
+  /// @dev DEPRECATED in favor of the single shnarfFinalBlockNumbers mapping.
   mapping(bytes32 dataHash => bytes32 finalStateRootHash) public dataFinalStateRootHashes;
+  /// @dev DEPRECATED in favor of the single shnarfFinalBlockNumbers mapping.
   mapping(bytes32 dataHash => bytes32 parentHash) public dataParents;
+  /// @dev DEPRECATED in favor of the single shnarfFinalBlockNumbers mapping.
   mapping(bytes32 dataHash => bytes32 shnarfHash) public dataShnarfHashes;
+  /// @dev DEPRECATED in favor of the single shnarfFinalBlockNumbers mapping.
   mapping(bytes32 dataHash => uint256 startingBlock) public dataStartingBlock;
+  /// @dev DEPRECATED in favor of the single shnarfFinalBlockNumbers mapping.
   mapping(bytes32 dataHash => uint256 endingBlock) public dataEndingBlock;
 
+  /// @dev DEPRECATED in favor of currentFinalizedState hash.
   uint256 public currentL2StoredL1MessageNumber;
+  /// @dev DEPRECATED in favor of currentFinalizedState hash.
   bytes32 public currentL2StoredL1RollingHash;
+
   bytes32 public currentFinalizedShnarf;
 
-  /// @dev Total contract storage is 8 slots.
+  /**
+   * @dev NB: THIS IS THE ONLY MAPPING BEING USED FOR DATA SUBMISSION TRACKING.
+   */
+  mapping(bytes32 shnarf => uint256 finalBlockNumber) public shnarfFinalBlockNumbers;
+
+  /// @dev Hash of the L2 computed L1 message number, rolling hash and finalized timestamp.
+  bytes32 public currentFinalizedState;
+
+  /// @dev Total contract storage is 10 slots.
 
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
@@ -41,16 +68,17 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
   }
 
   /**
-   * @notice Initializes LineaRollup and underlying service dependencies.
+   * @notice Initializes LineaRollup and underlying service dependencies - used for new networks only.
    * @dev DEFAULT_ADMIN_ROLE is set for the security council.
    * @dev OPERATOR_ROLE is set for operators.
+   * @dev Note: This is used for new testnets and local/CI testing, and will not replace existing proxy based contracts.
    * @param _initialStateRootHash The initial hash at migration used for proof verification.
    * @param _initialL2BlockNumber The initial block number at migration.
    * @param _defaultVerifier The default verifier for rollup proofs.
    * @param _securityCouncil The address for the security council performing admin operations.
    * @param _operators The allowed rollup operators at initialization.
    * @param _rateLimitPeriodInSeconds The period in which withdrawal amounts and fees will be accumulated.
-   * @param _rateLimitAmountInWei The limit allowed for withdrawing in the period.
+   * @param _rateLimitAmountInWei The limit allowed for withdrawing in the rate limit period.
    * @param _genesisTimestamp The L2 genesis timestamp for first finalization.
    */
   function initialize(
@@ -77,27 +105,44 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
     _grantRole(DEFAULT_ADMIN_ROLE, _securityCouncil);
     _grantRole(VERIFIER_SETTER_ROLE, _securityCouncil);
 
-    __ReentrancyGuard_init();
-
     __MessageService_init(_securityCouncil, _securityCouncil, _rateLimitPeriodInSeconds, _rateLimitAmountInWei);
 
     verifiers[0] = _defaultVerifier;
 
     currentL2BlockNumber = _initialL2BlockNumber;
     stateRootHashes[_initialL2BlockNumber] = _initialStateRootHash;
-    dataFinalStateRootHashes[EMPTY_HASH] = _initialStateRootHash;
-    dataShnarfHashes[EMPTY_HASH] = GENESIS_SHNARF;
+
+    shnarfFinalBlockNumbers[GENESIS_SHNARF] = _initialL2BlockNumber;
+
     currentFinalizedShnarf = GENESIS_SHNARF;
-    currentTimestamp = _genesisTimestamp;
+    currentFinalizedState = _computeLastFinalizedState(0, EMPTY_HASH, _genesisTimestamp);
   }
 
   /**
-   * @notice Initializes LineaRollup and sets the last finalized shnarf.
-   * @dev Finalization will be paused to make sure there are no overlaps.
-   * @param _lastFinalizedShnarf The last finalizedShnarf.
+   * @notice Initializes LineaRollup, sets the expected shnarfFinalBlockNumbers final block number(s) and sets finalization state.
+   * @dev The initialization will only do the last finalized shnarf and the unfinalized shnarfs of unfinalized data submissions.
+   * @dev Data submission and finalization will be paused temporarily to avoid missing submissions.
+   * @dev currentFinalizedState will also be initialized with existing storage values.
+   * @param _shnarfs The shnarfs to reset.
+   * @param _finalBlockNumbers The final blocks number to reset 1:1 with the shnarfs.
    */
-  function initializeLastFinalizedShnarf(bytes32 _lastFinalizedShnarf) external reinitializer(3) {
-    currentFinalizedShnarf = _lastFinalizedShnarf;
+  function initializeParentShnarfsAndFinalizedState(
+    bytes32[] calldata _shnarfs,
+    uint256[] calldata _finalBlockNumbers
+  ) external reinitializer(5) {
+    if (_shnarfs.length != _finalBlockNumbers.length) {
+      revert ShnarfAndFinalBlockNumberLengthsMismatched(_shnarfs.length, _finalBlockNumbers.length);
+    }
+
+    for (uint256 i; i < _shnarfs.length; i++) {
+      shnarfFinalBlockNumbers[_shnarfs[i]] = _finalBlockNumbers[i];
+    }
+
+    currentFinalizedState = _computeLastFinalizedState(
+      currentL2StoredL1MessageNumber,
+      currentL2StoredL1RollingHash,
+      currentTimestamp
+    );
   }
 
   /**
@@ -117,57 +162,114 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
   }
 
   /**
-   * @notice Submit compressed blob data using EIP-4844 blobs.
+   * @notice Unset the verifier contract address for a proof type.
+   * @dev VERIFIER_SETTER_ROLE is required to execute.
+   * @param _proofType The proof type being set/updated.
+   */
+  function unsetVerifierAddress(uint256 _proofType) external onlyRole(VERIFIER_SETTER_ROLE) {
+    emit VerifierAddressChanged(address(0), _proofType, msg.sender, verifiers[_proofType]);
+
+    delete verifiers[_proofType];
+  }
+
+  /**
+   * @notice Submit one or more EIP-4844 blobs.
    * @dev OPERATOR_ROLE is required to execute.
    * @dev This should be a blob carrying transaction.
-   * @param _submissionData The supporting data for blob data submission excluding the compressed data.
-   * @param _dataEvaluationClaim The data evaluation claim.
-   * @param _kzgCommitment The blob KZG commitment.
-   * @param _kzgProof The blob KZG point proof.
+   * @param _blobSubmissionData The data for blob submission including proofs and required polynomials.
+   * @param _parentShnarf The parent shnarf used in continuity checks as it includes the parentStateRootHash in its computation.
+   * @param _finalBlobShnarf The expected final shnarf post computation of all the blob shnarfs.
    */
-  function submitBlobData(
-    SupportingSubmissionData calldata _submissionData,
-    uint256 _dataEvaluationClaim,
-    bytes calldata _kzgCommitment,
-    bytes calldata _kzgProof
+  function submitBlobs(
+    BlobSubmissionData[] calldata _blobSubmissionData,
+    bytes32 _parentShnarf,
+    bytes32 _finalBlobShnarf
   ) external whenTypeAndGeneralNotPaused(PROVING_SYSTEM_PAUSE_TYPE) onlyRole(OPERATOR_ROLE) {
-    bytes32 currentDataHash = blobhash(0);
-    if (currentDataHash == EMPTY_HASH) {
-      revert EmptyBlobData();
+    uint256 blobSubmissionLength = _blobSubmissionData.length;
+
+    if (blobSubmissionLength == 0) {
+      revert BlobSubmissionDataIsMissing();
     }
 
-    if (_dataEvaluationClaim >= BLS_CURVE_MODULUS) revert YPointGreaterThanCurveModulus();
+    bytes32 currentDataEvaluationPoint;
+    bytes32 currentDataHash;
+    uint256 lastFinalizedBlockNumber = currentL2BlockNumber;
 
-    bytes32 dataEvaluationPoint = keccak256(abi.encode(_submissionData.snarkHash, currentDataHash));
+    /// @dev Assigning in memory saves a lot of gas vs. calldata reading.
+    BlobSubmissionData memory blobSubmissionData;
 
-    _validateSubmissionData(_submissionData, currentDataHash);
+    bytes32 computedShnarf = _parentShnarf;
 
-    _verifyPointEvaluation(
-      currentDataHash,
-      uint256(dataEvaluationPoint),
-      _dataEvaluationClaim,
-      _kzgCommitment,
-      _kzgProof
-    );
+    uint256 blobFinalBlockNumber = shnarfFinalBlockNumbers[computedShnarf];
 
-    _calculateShnarfAndSave(dataEvaluationPoint, bytes32(_dataEvaluationClaim), currentDataHash, _submissionData);
+    for (uint256 i; i < blobSubmissionLength; i++) {
+      blobSubmissionData = _blobSubmissionData[i];
+
+      currentDataHash = blobhash(i);
+
+      if (currentDataHash == EMPTY_HASH) {
+        revert EmptyBlobDataAtIndex(i);
+      }
+
+      _validateSubmissionData(blobSubmissionData.submissionData, blobFinalBlockNumber, lastFinalizedBlockNumber);
+
+      currentDataEvaluationPoint = Utils._efficientKeccak(blobSubmissionData.submissionData.snarkHash, currentDataHash);
+
+      _verifyPointEvaluation(
+        currentDataHash,
+        uint256(currentDataEvaluationPoint),
+        blobSubmissionData.dataEvaluationClaim,
+        blobSubmissionData.kzgCommitment,
+        blobSubmissionData.kzgProof
+      );
+
+      computedShnarf = _computeShnarf(
+        computedShnarf,
+        blobSubmissionData.submissionData.snarkHash,
+        blobSubmissionData.submissionData.finalStateRootHash,
+        currentDataEvaluationPoint,
+        bytes32(blobSubmissionData.dataEvaluationClaim)
+      );
+
+      blobFinalBlockNumber = blobSubmissionData.submissionData.finalBlockInData;
+    }
+
+    if (_finalBlobShnarf != computedShnarf) {
+      revert FinalShnarfWrong(_finalBlobShnarf, computedShnarf);
+    }
+
+    /**
+     * @dev validate we haven't submitted the last shnarf.
+     * Note: As only the last shnarf is stored, we don't need to validate shnarfs,
+     * computed for any previous blobs in the submission (if multiple are submitted).
+     */
+    if (shnarfFinalBlockNumbers[computedShnarf] != 0) {
+      revert DataAlreadySubmitted(computedShnarf);
+    }
+
+    /// @dev use the last shnarf as the submission to store as technically it becomes the next parent shnarf.
+    shnarfFinalBlockNumbers[computedShnarf] = blobFinalBlockNumber;
+
+    emit DataSubmittedV2(computedShnarf, _blobSubmissionData[0].submissionData.firstBlockInData, blobFinalBlockNumber);
   }
 
   /**
    * @notice Submit blobs using compressed data via calldata.
    * @dev OPERATOR_ROLE is required to execute.
-   * @param _submissionData The supporting data for compressed data submission.
+   * @param _submissionData The supporting data for compressed data submission including compressed data.
+   * @param _parentShnarf The parent shnarf used in continuity checks as it includes the parentStateRootHash in its computation.
+   * @param _expectedShnarf The expected shnarf post computation of all the submission.
    */
-  function submitData(
-    SubmissionData calldata _submissionData
+  function submitDataAsCalldata(
+    SubmissionDataV2 calldata _submissionData,
+    bytes32 _parentShnarf,
+    bytes32 _expectedShnarf
   ) external whenTypeAndGeneralNotPaused(PROVING_SYSTEM_PAUSE_TYPE) onlyRole(OPERATOR_ROLE) {
     if (_submissionData.compressedData.length == 0) {
       revert EmptySubmissionData();
     }
 
-    SupportingSubmissionData memory submissionData = SupportingSubmissionData({
-      parentStateRootHash: _submissionData.parentStateRootHash,
-      dataParentHash: _submissionData.dataParentHash,
+    SupportingSubmissionDataV2 memory submissionData = SupportingSubmissionDataV2({
       finalStateRootHash: _submissionData.finalStateRootHash,
       firstBlockInData: _submissionData.firstBlockInData,
       finalBlockInData: _submissionData.finalBlockInData,
@@ -176,92 +278,110 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
 
     bytes32 currentDataHash = keccak256(_submissionData.compressedData);
 
-    _validateSubmissionData(submissionData, currentDataHash);
+    _validateSubmissionData(submissionData, shnarfFinalBlockNumbers[_parentShnarf], currentL2BlockNumber);
 
-    bytes32 dataEvaluationPoint = keccak256(abi.encode(_submissionData.snarkHash, currentDataHash));
-    bytes32 compressedDataComputedY = _calculateY(_submissionData.compressedData, dataEvaluationPoint);
-
-    _calculateShnarfAndSave(dataEvaluationPoint, compressedDataComputedY, currentDataHash, submissionData);
-  }
-
-  /**
-   * @notice Calculates the shnarf and saves submission data.
-   * @param _dataEvaluationPoint The data evaluation point.
-   * @param _dataEvaluationClaim The data evaluation claim.
-   * @param _currentDataHash The current data hash, blob or compressed data.
-   * @param _submissionData The supporting data for compressed data submission excluding compressed data.
-   */
-  function _calculateShnarfAndSave(
-    bytes32 _dataEvaluationPoint,
-    bytes32 _dataEvaluationClaim,
-    bytes32 _currentDataHash,
-    SupportingSubmissionData memory _submissionData
-  ) internal {
-    bytes32 shnarf = dataShnarfHashes[_submissionData.dataParentHash];
-
-    if (shnarf == EMPTY_HASH) {
-      revert DataParentHasEmptyShnarf();
-    }
-
-    shnarf = keccak256(
-      abi.encode(
-        shnarf,
-        _submissionData.snarkHash,
-        _submissionData.finalStateRootHash,
-        _dataEvaluationPoint,
-        _dataEvaluationClaim
-      )
+    bytes32 dataEvaluationPoint = Utils._efficientKeccak(_submissionData.snarkHash, currentDataHash);
+    bytes32 computedShnarf = _computeShnarf(
+      _parentShnarf,
+      _submissionData.snarkHash,
+      _submissionData.finalStateRootHash,
+      dataEvaluationPoint,
+      _calculateY(_submissionData.compressedData, dataEvaluationPoint)
     );
 
-    dataParents[_currentDataHash] = _submissionData.dataParentHash;
-    dataFinalStateRootHashes[_currentDataHash] = _submissionData.finalStateRootHash;
-    dataStartingBlock[_currentDataHash] = _submissionData.firstBlockInData;
-    dataEndingBlock[_currentDataHash] = _submissionData.finalBlockInData;
-    dataShnarfHashes[_currentDataHash] = shnarf;
+    if (_expectedShnarf != computedShnarf) {
+      revert FinalShnarfWrong(_expectedShnarf, computedShnarf);
+    }
 
-    emit DataSubmitted(_currentDataHash, _submissionData.firstBlockInData, _submissionData.finalBlockInData);
+    if (shnarfFinalBlockNumbers[computedShnarf] != 0) {
+      revert DataAlreadySubmitted(computedShnarf);
+    }
+
+    shnarfFinalBlockNumbers[computedShnarf] = _submissionData.finalBlockInData;
+
+    emit DataSubmittedV2(computedShnarf, _submissionData.firstBlockInData, _submissionData.finalBlockInData);
   }
+
   /**
    * @notice Internal function to validate submission data.
    * @param _submissionData The supporting data for compressed data submission excluding compressed data.
-   * @param _currentDataHash The current data hash, blob or compressed data.
+   * @param _parentFinalBlockNumber The final block number for the parent blob.
+   * @param _lastFinalizedBlockNumber The last finalized block number.
    */
   function _validateSubmissionData(
-    SupportingSubmissionData memory _submissionData,
-    bytes32 _currentDataHash
-  ) internal view {
+    SupportingSubmissionDataV2 memory _submissionData,
+    uint256 _parentFinalBlockNumber,
+    uint256 _lastFinalizedBlockNumber
+  ) internal pure {
     if (_submissionData.finalStateRootHash == EMPTY_HASH) {
       revert FinalBlockStateEqualsZeroHash();
     }
 
-    bytes32 parentFinalStateRootHash = dataFinalStateRootHashes[_submissionData.dataParentHash];
-    uint256 lastFinalizedBlock = currentL2BlockNumber;
-
-    uint256 parentEndingBlock = dataEndingBlock[_submissionData.dataParentHash];
-
-    if (parentFinalStateRootHash == EMPTY_HASH) {
-      revert StateRootHashInvalid(parentFinalStateRootHash, _submissionData.parentStateRootHash);
+    if (_submissionData.snarkHash == EMPTY_HASH) {
+      revert SnarkHashIsZeroHash();
     }
 
-    uint256 expectedStartingBlock = parentEndingBlock + 1;
-    if (expectedStartingBlock != _submissionData.firstBlockInData) {
-      revert DataStartingBlockDoesNotMatch(expectedStartingBlock, _submissionData.firstBlockInData);
+    // for it to be equal the number would have to wrap round twice in overflow..
+    unchecked {
+      if (_parentFinalBlockNumber + 1 != _submissionData.firstBlockInData) {
+        revert DataStartingBlockDoesNotMatch(_parentFinalBlockNumber + 1, _submissionData.firstBlockInData);
+      }
     }
 
-    if (_submissionData.firstBlockInData <= lastFinalizedBlock) {
-      revert FirstBlockLessThanOrEqualToLastFinalizedBlock(_submissionData.firstBlockInData, lastFinalizedBlock);
+    if (_submissionData.firstBlockInData <= _lastFinalizedBlockNumber) {
+      revert FirstBlockLessThanOrEqualToLastFinalizedBlock(_submissionData.firstBlockInData, _lastFinalizedBlockNumber);
     }
 
     if (_submissionData.firstBlockInData > _submissionData.finalBlockInData) {
       revert FirstBlockGreaterThanFinalBlock(_submissionData.firstBlockInData, _submissionData.finalBlockInData);
     }
+  }
 
-    if (_submissionData.parentStateRootHash != parentFinalStateRootHash) {
-      revert StateRootHashInvalid(parentFinalStateRootHash, _submissionData.parentStateRootHash);
+  /**
+   * @notice Internal function to compute and save the finalization state.
+   * @dev Using assembly this way is cheaper gas wise.
+   * @param _messageNumber Is the last L2 computed L1 message number in the finalization.
+   * @param _rollingHash Is the last L2 computed L1 rolling hash in the finalization.
+   * @param _timestamp The final timestamp in the finalization.
+   */
+  function _computeLastFinalizedState(
+    uint256 _messageNumber,
+    bytes32 _rollingHash,
+    uint256 _timestamp
+  ) internal pure returns (bytes32 hashedFinalizationState) {
+    assembly {
+      let mPtr := mload(0x40)
+      mstore(mPtr, _messageNumber)
+      mstore(add(mPtr, 0x20), _rollingHash)
+      mstore(add(mPtr, 0x40), _timestamp)
+      hashedFinalizationState := keccak256(mPtr, 0x60)
     }
+  }
 
-    if (dataFinalStateRootHashes[_currentDataHash] != EMPTY_HASH) {
-      revert DataAlreadySubmitted(_currentDataHash);
+  /**
+   * @notice Internal function to compute the shnarf more efficiently.
+   * @dev Using assembly this way is cheaper gas wise.
+   * @param _parentShnarf The shnarf of the parent data item.
+   * @param _snarkHash Is the computed hash for compressed data (using a SNARK-friendly hash function) that aggregates per data submission to be used in public input.
+   * @param _finalStateRootHash The final state root hash of the data being submitted.
+   * @param _dataEvaluationPoint The data evaluation point.
+   * @param _dataEvaluationClaim The data evaluation claim.
+   */
+  function _computeShnarf(
+    bytes32 _parentShnarf,
+    bytes32 _snarkHash,
+    bytes32 _finalStateRootHash,
+    bytes32 _dataEvaluationPoint,
+    bytes32 _dataEvaluationClaim
+  ) internal pure returns (bytes32 shnarf) {
+    assembly {
+      let mPtr := mload(0x40)
+      mstore(mPtr, _parentShnarf)
+      mstore(add(mPtr, 0x20), _snarkHash)
+      mstore(add(mPtr, 0x40), _finalStateRootHash)
+      mstore(add(mPtr, 0x60), _dataEvaluationPoint)
+      mstore(add(mPtr, 0x80), _dataEvaluationClaim)
+      shnarf := keccak256(mPtr, 0xA0)
     }
   }
 
@@ -278,8 +398,8 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
     bytes32 _currentDataHash,
     uint256 _dataEvaluationPoint,
     uint256 _dataEvaluationClaim,
-    bytes calldata _kzgCommitment,
-    bytes calldata _kzgProof
+    bytes memory _kzgCommitment,
+    bytes memory _kzgProof
   ) internal view {
     assembly {
       _dataEvaluationPoint := mod(_dataEvaluationPoint, BLS_CURVE_MODULUS)
@@ -315,10 +435,10 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
    * @param _proofType The proof type.
    * @param _finalizationData The full finalization data.
    */
-  function finalizeCompressedBlocksWithProof(
+  function finalizeBlocksWithProof(
     bytes calldata _aggregatedProof,
     uint256 _proofType,
-    FinalizationData calldata _finalizationData
+    FinalizationDataV2 calldata _finalizationData
   ) external whenTypeAndGeneralNotPaused(PROVING_SYSTEM_PAUSE_TYPE) onlyRole(OPERATOR_ROLE) {
     if (_aggregatedProof.length == 0) {
       revert ProofIsEmpty();
@@ -330,62 +450,40 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
       revert StartingRootHashDoesNotMatch();
     }
 
-    if (dataShnarfHashes[_finalizationData.dataParentHash] != currentFinalizedShnarf) {
-      revert LastFinalizedShnarfWrong(currentFinalizedShnarf, dataShnarfHashes[_finalizationData.dataParentHash]);
+    bytes32 lastFinalizedShnarf = currentFinalizedShnarf;
+
+    if (_finalizationData.lastFinalizedShnarf != lastFinalizedShnarf) {
+      revert LastFinalizedShnarfWrong(lastFinalizedShnarf, _finalizationData.lastFinalizedShnarf);
     }
 
-    uint256 lastFinalizedL2StoredL1MessageNumber = currentL2StoredL1MessageNumber;
-    bytes32 lastFinalizedL2StoredL1RollingHash = currentL2StoredL1RollingHash;
+    bytes32 finalShnarf = _finalizeBlocks(_finalizationData, lastFinalizedBlockNumber, true);
 
-    bytes32 shnarf = _finalizeCompressedBlocks(_finalizationData, lastFinalizedBlockNumber, true);
-
-    uint256 publicInput = uint256(
-      keccak256(
-        bytes.concat(
-          abi.encode(
-            shnarf,
-            _finalizationData.parentStateRootHash,
-            _finalizationData.lastFinalizedTimestamp,
-            _finalizationData.finalTimestamp,
-            lastFinalizedBlockNumber,
-            _finalizationData.finalBlockNumber
-          ),
-          abi.encode(
-            lastFinalizedL2StoredL1RollingHash,
-            _finalizationData.l1RollingHash,
-            lastFinalizedL2StoredL1MessageNumber,
-            _finalizationData.l1RollingHashMessageNumber,
-            _finalizationData.l2MerkleTreesDepth,
-            keccak256(abi.encodePacked(_finalizationData.l2MerkleRoots))
-          )
-        )
-      )
+    uint256 publicInput = _computePublicInput(
+      _finalizationData,
+      lastFinalizedShnarf,
+      finalShnarf,
+      lastFinalizedBlockNumber
     );
-
-    assembly {
-      publicInput := mod(publicInput, MODULO_R)
-    }
 
     _verifyProof(
       publicInput,
       _proofType,
       _aggregatedProof,
       _finalizationData.parentStateRootHash,
-      _finalizationData.finalBlockNumber
+      _finalizationData.finalBlockInData,
+      _finalizationData.shnarfData.finalStateRootHash
     );
   }
 
   /**
    * @notice Finalize compressed blocks without proof.
    * @dev DEFAULT_ADMIN_ROLE is required to execute.
-   * @param _finalizationData The simplified finalization data without proof.
+   * @param _finalizationData The full finalization data.
    */
-  function finalizeCompressedBlocksWithoutProof(
-    FinalizationData calldata _finalizationData
+  function finalizeBlocksWithoutProof(
+    FinalizationDataV2 calldata _finalizationData
   ) external whenTypeNotPaused(GENERAL_PAUSE_TYPE) onlyRole(DEFAULT_ADMIN_ROLE) {
-    uint256 lastFinalizedBlock = currentL2BlockNumber;
-
-    _finalizeCompressedBlocks(_finalizationData, lastFinalizedBlock, false);
+    _finalizeBlocks(_finalizationData, currentL2BlockNumber, false);
   }
 
   /**
@@ -393,101 +491,81 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
    * @param _finalizationData The full finalization data.
    * @param _lastFinalizedBlock The last finalized block.
    * @param _withProof If we are finalizing with a proof.
-   * @return shnarf The shnarf stored at the last data hash being finalized.
+   * @return finalShnarf The final computed shnarf in finalizing.
    */
-  function _finalizeCompressedBlocks(
-    FinalizationData calldata _finalizationData,
+  function _finalizeBlocks(
+    FinalizationDataV2 calldata _finalizationData,
     uint256 _lastFinalizedBlock,
     bool _withProof
-  ) internal returns (bytes32 shnarf) {
-    uint256 finalizationDataDataHashesLength = _finalizationData.dataHashes.length;
-
-    if (finalizationDataDataHashesLength == 0) {
-      revert FinalizationDataMissing();
-    }
-
-    if (_finalizationData.finalBlockNumber <= _lastFinalizedBlock) {
+  ) internal returns (bytes32 finalShnarf) {
+    if (_finalizationData.finalBlockInData <= _lastFinalizedBlock) {
       revert FinalBlockNumberLessThanOrEqualToLastFinalizedBlock(
-        _finalizationData.finalBlockNumber,
+        _finalizationData.finalBlockInData,
         _lastFinalizedBlock
       );
     }
 
     _validateL2ComputedRollingHash(_finalizationData.l1RollingHashMessageNumber, _finalizationData.l1RollingHash);
 
-    if (currentTimestamp != _finalizationData.lastFinalizedTimestamp) {
-      revert TimestampsNotInSequence(currentTimestamp, _finalizationData.lastFinalizedTimestamp);
+    if (
+      _computeLastFinalizedState(
+        _finalizationData.lastFinalizedL1RollingHashMessageNumber,
+        _finalizationData.lastFinalizedL1RollingHash,
+        _finalizationData.lastFinalizedTimestamp
+      ) != currentFinalizedState
+    ) {
+      revert FinalizationStateIncorrect(
+        _computeLastFinalizedState(
+          _finalizationData.lastFinalizedL1RollingHashMessageNumber,
+          _finalizationData.lastFinalizedL1RollingHash,
+          _finalizationData.lastFinalizedTimestamp
+        ),
+        currentFinalizedState
+      );
     }
 
     if (_finalizationData.finalTimestamp >= block.timestamp) {
       revert FinalizationInTheFuture(_finalizationData.finalTimestamp, block.timestamp);
     }
 
-    bytes32 startingDataParentHash = dataParents[_finalizationData.dataHashes[0]];
-
-    if (startingDataParentHash != _finalizationData.dataParentHash) {
-      revert ParentHashesDoesNotMatch(startingDataParentHash, _finalizationData.dataParentHash);
-    }
-
-    bytes32 startingParentFinalStateRootHash = dataFinalStateRootHashes[startingDataParentHash];
-
-    if (startingParentFinalStateRootHash != _finalizationData.parentStateRootHash) {
-      revert FinalStateRootHashDoesNotMatch(startingParentFinalStateRootHash, _finalizationData.parentStateRootHash);
-    }
-
-    bytes32 finalBlockState = dataFinalStateRootHashes[
-      _finalizationData.dataHashes[finalizationDataDataHashesLength - 1]
-    ];
-
-    if (finalBlockState == EMPTY_HASH) {
+    if (_finalizationData.shnarfData.finalStateRootHash == EMPTY_HASH) {
       revert FinalBlockStateEqualsZeroHash();
     }
 
-    unchecked {
-      shnarf = dataShnarfHashes[_finalizationData.dataHashes[_finalizationData.dataHashes.length - 1]];
-      if (shnarf == EMPTY_HASH) {
-        revert DataParentHasEmptyShnarf();
-      }
+    finalShnarf = _computeShnarf(
+      _finalizationData.shnarfData.parentShnarf,
+      _finalizationData.shnarfData.snarkHash,
+      _finalizationData.shnarfData.finalStateRootHash,
+      _finalizationData.shnarfData.dataEvaluationPoint,
+      _finalizationData.shnarfData.dataEvaluationClaim
+    );
+
+    if (shnarfFinalBlockNumbers[finalShnarf] != _finalizationData.finalBlockInData) {
+      revert FinalBlockDoesNotMatchShnarfFinalBlock(
+        _finalizationData.finalBlockInData,
+        shnarfFinalBlockNumbers[finalShnarf]
+      );
     }
 
     _addL2MerkleRoots(_finalizationData.l2MerkleRoots, _finalizationData.l2MerkleTreesDepth);
     _anchorL2MessagingBlocks(_finalizationData.l2MessagingBlocksOffsets, _lastFinalizedBlock);
 
-    for (uint256 i = 1; i < finalizationDataDataHashesLength; ++i) {
-      unchecked {
-        if (dataParents[_finalizationData.dataHashes[i]] != _finalizationData.dataHashes[i - 1]) {
-          revert DataHashesNotInSequence(
-            _finalizationData.dataHashes[i - 1],
-            dataParents[_finalizationData.dataHashes[i]]
-          );
-        }
-      }
-    }
+    stateRootHashes[_finalizationData.finalBlockInData] = _finalizationData.shnarfData.finalStateRootHash;
 
-    uint256 suppliedStartingBlock = dataStartingBlock[_finalizationData.dataHashes[0]];
-    uint256 suppliedFinalBlock = dataEndingBlock[_finalizationData.dataHashes[finalizationDataDataHashesLength - 1]];
+    currentL2BlockNumber = _finalizationData.finalBlockInData;
 
-    // check final item supplied matches
-    if (suppliedFinalBlock != _finalizationData.finalBlockNumber) {
-      revert DataEndingBlockDoesNotMatch(suppliedFinalBlock, _finalizationData.finalBlockNumber);
-    }
+    currentFinalizedShnarf = finalShnarf;
 
-    // check suppliedStartingBlock is 1 more than the last finalized block
-    if (suppliedStartingBlock != _lastFinalizedBlock + 1) {
-      revert DataStartingBlockDoesNotMatch(_lastFinalizedBlock + 1, suppliedStartingBlock);
-    }
-
-    stateRootHashes[_finalizationData.finalBlockNumber] = finalBlockState;
-    currentFinalizedShnarf = shnarf;
-    currentTimestamp = _finalizationData.finalTimestamp;
-    currentL2BlockNumber = _finalizationData.finalBlockNumber;
-    currentL2StoredL1MessageNumber = _finalizationData.l1RollingHashMessageNumber;
-    currentL2StoredL1RollingHash = _finalizationData.l1RollingHash;
+    currentFinalizedState = _computeLastFinalizedState(
+      _finalizationData.l1RollingHashMessageNumber,
+      _finalizationData.l1RollingHash,
+      _finalizationData.finalTimestamp
+    );
 
     emit DataFinalized(
-      _finalizationData.finalBlockNumber,
+      _finalizationData.finalBlockInData,
       _finalizationData.parentStateRootHash,
-      finalBlockState,
+      _finalizationData.shnarfData.finalStateRootHash,
       _withProof
     );
   }
@@ -549,6 +627,102 @@ contract LineaRollup is AccessControlUpgradeable, ZkEvmV2, L1MessageService, ILi
           BLS_CURVE_MODULUS
         )
       }
+    }
+  }
+
+  /**
+   * @notice Compute the public input.
+   * @dev Using assembly this way is cheaper gas wise.
+   * @dev NB: the dynamic sized fields are placed last in _finalizationData on purpose to optimise hashing ranges.
+   * @dev Computing the public input as the following:
+   * keccak256(
+   *  abi.encode(
+   *     _lastFinalizedShnarf,
+   *     _finalShnarf,
+   *     _finalizationData.lastFinalizedTimestamp,
+   *     _finalizationData.finalTimestamp,
+   *     _lastFinalizedBlockNumber,
+   *     _finalizationData.finalBlockInData,
+   *     _finalizationData.lastFinalizedL1RollingHash,
+   *     _finalizationData.l1RollingHash,
+   *     _finalizationData.lastFinalizedL1RollingHashMessageNumber,
+   *     _finalizationData.l1RollingHashMessageNumber,
+   *     _finalizationData.l2MerkleTreesDepth,
+   *     keccak256(
+   *         abi.encodePacked(_finalizationData.l2MerkleRoots)
+   *     )
+   *   )
+   * )
+   * Data is found at the following offsets:
+   * 0x00    parentStateRootHash
+   * 0x20    lastFinalizedShnarf
+   * 0x40    finalBlockInData
+   * 0x60    shnarfData.parentShnarf
+   * 0x80    shnarfData.snarkHash
+   * 0xa0    shnarfData.finalStateRootHash
+   * 0xc0    shnarfData.dataEvaluationPoint
+   * 0xe0    shnarfData.dataEvaluationClaim
+   * 0x100   lastFinalizedTimestamp
+   * 0x120   finalTimestamp
+   * 0x140   lastFinalizedL1RollingHash
+   * 0x160   l1RollingHash
+   * 0x180   lastFinalizedL1RollingHashMessageNumber
+   * 0x1a0   l1RollingHashMessageNumber
+   * 0x1c0   l2MerkleTreesDepth
+   * 0x1e0   l2MerkleRootsLengthLocation
+   * 0x200   l2MessagingBlocksOffsetsLengthLocation
+   * 0x220   l2MerkleRootsLength
+   * 0x240   l2MerkleRoots
+   * Dynamic l2MessagingBlocksOffsetsLength (location depends on where l2MerkleRoots ends)
+   * Dynamic l2MessagingBlocksOffsets (location depends on where l2MerkleRoots ends)
+   * @param _finalizationData The full finalization data.
+   * @param _lastFinalizedShnarf The last finalized shnarf.
+   * @param _finalShnarf The final shnarf in the finalization.
+   * @param _lastFinalizedBlockNumber The last finalized block number.
+   */
+  function _computePublicInput(
+    FinalizationDataV2 calldata _finalizationData,
+    bytes32 _lastFinalizedShnarf,
+    bytes32 _finalShnarf,
+    uint256 _lastFinalizedBlockNumber
+  ) private pure returns (uint256 publicInput) {
+    assembly {
+      let mPtr := mload(0x40)
+      mstore(mPtr, _lastFinalizedShnarf)
+      mstore(add(mPtr, 0x20), _finalShnarf)
+
+      /**
+       * _finalizationData.lastFinalizedTimestamp
+       * _finalizationData.finalTimestamp
+       */
+      calldatacopy(add(mPtr, 0x40), add(_finalizationData, 0x100), 0x40)
+
+      mstore(add(mPtr, 0x80), _lastFinalizedBlockNumber)
+
+      // _finalizationData.finalBlockInData
+      calldatacopy(add(mPtr, 0xA0), add(_finalizationData, 0x40), 0x20)
+
+      /**
+       * _finalizationData.lastFinalizedL1RollingHash
+       * _finalizationData.l1RollingHash
+       * _finalizationData.lastFinalizedL1RollingHashMessageNumber
+       * _finalizationData.l1RollingHashMessageNumber
+       * _finalizationData.l2MerkleTreesDepth
+       */
+      calldatacopy(add(mPtr, 0xC0), add(_finalizationData, 0x140), 0xA0)
+
+      /**
+       * @dev Note the following in hashing the _finalizationData.l2MerkleRoots array:
+       * The second memory pointer and free pointer are offset by 0x20 to temporarily hash the array outside the scope of working memory,
+       * as we need the space left for the array hash to be stored at 0x160.
+       */
+      let mPtrMerkleRoot := add(mPtr, 0x180)
+      let merkleRootsLen := calldataload(add(_finalizationData, 0x220))
+      calldatacopy(mPtrMerkleRoot, add(_finalizationData, 0x240), mul(merkleRootsLen, 0x20))
+      let l2MerkleRootsHash := keccak256(mPtrMerkleRoot, mul(merkleRootsLen, 0x20))
+      mstore(add(mPtr, 0x160), l2MerkleRootsHash)
+
+      publicInput := mod(keccak256(mPtr, 0x180), MODULO_R)
     }
   }
 }

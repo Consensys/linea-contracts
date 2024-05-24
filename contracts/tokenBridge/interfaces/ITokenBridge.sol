@@ -8,9 +8,19 @@ pragma solidity 0.8.19;
  */
 interface ITokenBridge {
   event TokenReserved(address indexed token);
+  event ReservationRemoved(address indexed token);
   event CustomContractSet(address indexed nativeToken, address indexed customContract, address indexed setBy);
-  event BridgingInitiated(address indexed sender, address indexed recipient, address indexed token, uint256 amount);
+  /// @dev DEPRECATED in favor of BridgingInitiatedV2.
+  event BridgingInitiated(address indexed sender, address recipient, address indexed token, uint256 indexed amount);
+  event BridgingInitiatedV2(address indexed sender, address indexed recipient, address indexed token, uint256 amount);
+  /// @dev DEPRECATED in favor of BridgingFinalizedV2.
   event BridgingFinalized(
+    address indexed nativeToken,
+    address indexed bridgedToken,
+    uint256 indexed amount,
+    address recipient
+  );
+  event BridgingFinalizedV2(
     address indexed nativeToken,
     address indexed bridgedToken,
     uint256 amount,
@@ -37,7 +47,9 @@ interface ITokenBridge {
   error NotReserved(address token);
   error TokenNotDeployed(address token);
   error AlreadyBrigedToNativeTokenSet(address token);
+  error NativeToBridgedTokenAlreadySet(address token);
   error StatusAddressNotAllowed(address token);
+  error DecimalsAreUnknown(address token);
 
   /**
    * @notice Similar to `bridgeToken` function but allows to pass additional

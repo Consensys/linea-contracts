@@ -4,6 +4,16 @@ pragma solidity 0.8.24;
 import { L1MessageManager } from "../messageService/l1/L1MessageManager.sol";
 
 contract TestL1MessageManager is L1MessageManager {
+  /**
+   * @dev Thrown when the L1->L2 message has not been sent.
+   */
+  error L1L2MessageNotSent(bytes32 messageHash);
+
+  /**
+   * @dev Thrown when the message has already been received.
+   */
+  error MessageAlreadyReceived(bytes32 messageHash);
+
   ///@dev V1
   function addL2L1MessageHash(bytes32 _messageHash) external {
     if (inboxL2L1MessageStatus[_messageHash] != INBOX_STATUS_UNKNOWN) {

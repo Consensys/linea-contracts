@@ -76,6 +76,7 @@ abstract contract L2MessageServiceV1 is
     __AccessControl_init();
     __RateLimiter_init(_rateLimitPeriod, _rateLimitAmount);
     __L2MessageManager_init(_l1l2MessageSetter);
+    __ReentrancyGuard_init();
 
     nextMessageNumber = 1;
 

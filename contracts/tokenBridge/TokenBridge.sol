@@ -65,7 +65,7 @@ contract TokenBridge is
 
   /// @dev Ensures the token has not been bridged before.
   modifier isNewToken(address _token) {
-    if (nativeToBridgedToken[sourceChainId][_token] != EMPTY || bridgedToNativeToken[_token] != EMPTY)
+    if (bridgedToNativeToken[_token] != EMPTY || nativeToBridgedToken[sourceChainId][_token] != EMPTY)
       revert AlreadyBridgedToken(_token);
     _;
   }
@@ -141,6 +141,9 @@ contract TokenBridge is
    *   that have not been bridged yet.
    *   Linea can pause the bridge for security reason. In this case new bridge
    *   transaction would revert.
+   * @dev Note: If, when bridging an unbridged token and decimals are unknown,
+   * the call will revert to prevent mismatched decimals. Only those ERC20s,
+   * with a decimals function are supported.
    * @param _token The address of the token to be bridged.
    * @param _amount The amount of the token to be bridged.
    * @param _recipient The address that will receive the tokens on the other chain.
@@ -150,22 +153,19 @@ contract TokenBridge is
     uint256 _amount,
     address _recipient
   ) public payable nonZeroAddress(_token) nonZeroAddress(_recipient) nonZeroAmount(_amount) whenNotPaused nonReentrant {
-    address nativeMappingValue = nativeToBridgedToken[sourceChainId][_token];
-
+    uint256 sourceChainIdCache = sourceChainId;
+    address nativeMappingValue = nativeToBridgedToken[sourceChainIdCache][_token];
     if (nativeMappingValue == RESERVED_STATUS) {
       // Token is reserved
       revert ReservedToken(_token);
     }
 
-    address bridgedMappingValue = bridgedToNativeToken[_token];
-    address nativeToken;
+    address nativeToken = bridgedToNativeToken[_token];
     uint256 chainId;
     bytes memory tokenMetadata;
 
-    if (bridgedMappingValue != EMPTY) {
-      // Token is bridged
+    if (nativeToken != EMPTY) {
       BridgedToken(_token).burn(msg.sender, _amount);
-      nativeToken = bridgedMappingValue;
       chainId = targetChainId;
     } else {
       // Token is native
@@ -175,12 +175,11 @@ contract TokenBridge is
       uint256 balanceBefore = IERC20Upgradeable(_token).balanceOf(address(this));
       IERC20Upgradeable(_token).safeTransferFrom(msg.sender, address(this), _amount);
       _amount = IERC20Upgradeable(_token).balanceOf(address(this)) - balanceBefore;
-
       nativeToken = _token;
 
       if (nativeMappingValue == EMPTY) {
         // New token
-        nativeToBridgedToken[sourceChainId][_token] = NATIVE_STATUS;
+        nativeToBridgedToken[sourceChainIdCache][_token] = NATIVE_STATUS;
         emit NewToken(_token);
       }
 
@@ -188,15 +187,14 @@ contract TokenBridge is
       if (nativeMappingValue != DEPLOYED_STATUS) {
         tokenMetadata = abi.encode(_safeName(_token), _safeSymbol(_token), _safeDecimals(_token));
       }
-      chainId = sourceChainId;
+      chainId = sourceChainIdCache;
     }
-
     messageService.sendMessage{ value: msg.value }(
       remoteSender,
       msg.value, // fees
       abi.encodeCall(ITokenBridge.completeBridging, (nativeToken, _amount, _recipient, chainId, tokenMetadata))
     );
-    emit BridgingInitiated(msg.sender, _recipient, _token, _amount);
+    emit BridgingInitiatedV2(msg.sender, _recipient, _token, _amount);
   }
 
   /**
@@ -204,6 +202,8 @@ contract TokenBridge is
    *   permit data to do the ERC20 approval in a single transaction.
    * @notice _permit can fail silently, don't rely on this function passing as a form
    *   of authentication
+   * @dev There is no need for validation at this level as the validation on pausing,
+   * and empty values exists on the "bridgeToken" call.
    * @param _token The address of the token to be bridged.
    * @param _amount The amount of the token to be bridged.
    * @param _recipient The address that will receive the tokens on the other chain.
@@ -214,7 +214,7 @@ contract TokenBridge is
     uint256 _amount,
     address _recipient,
     bytes calldata _permitData
-  ) external payable nonZeroAddress(_token) nonZeroAmount(_amount) whenNotPaused {
+  ) external payable {
     if (_permitData.length != 0) {
       _permit(_token, _permitData);
     }
@@ -255,7 +255,7 @@ contract TokenBridge is
       }
       BridgedToken(bridgedToken).mint(_recipient, _amount);
     }
-    emit BridgingFinalized(_nativeToken, bridgedToken, _amount, _recipient);
+    emit BridgingFinalizedV2(_nativeToken, bridgedToken, _amount, _recipient);
   }
 
   /**
@@ -300,10 +300,8 @@ contract TokenBridge is
    * @param _nativeTokens Array of native tokens for which the DEPLOYED status must be set.
    */
   function setDeployed(address[] calldata _nativeTokens) external onlyMessagingService onlyAuthorizedRemoteSender {
-    address nativeToken;
     unchecked {
       for (uint256 i; i < _nativeTokens.length; ) {
-        nativeToken = _nativeTokens[i];
         nativeToBridgedToken[sourceChainId][_nativeTokens[i]] = DEPLOYED_STATUS;
         emit TokenDeployed(_nativeTokens[i]);
         ++i;
@@ -364,8 +362,12 @@ contract TokenBridge is
    * @param _token The address of the token to be removed from the reserved list.
    */
   function removeReserved(address _token) external nonZeroAddress(_token) onlyOwner {
-    if (nativeToBridgedToken[sourceChainId][_token] != RESERVED_STATUS) revert NotReserved(_token);
-    nativeToBridgedToken[sourceChainId][_token] = EMPTY;
+    uint256 cachedSourceChainId = sourceChainId;
+
+    if (nativeToBridgedToken[cachedSourceChainId][_token] != RESERVED_STATUS) revert NotReserved(_token);
+    nativeToBridgedToken[cachedSourceChainId][_token] = EMPTY;
+
+    emit ReservationRemoved(_token);
   }
 
   /**
@@ -385,7 +387,14 @@ contract TokenBridge is
     if (_targetContract == NATIVE_STATUS || _targetContract == DEPLOYED_STATUS || _targetContract == RESERVED_STATUS) {
       revert StatusAddressNotAllowed(_targetContract);
     }
-    nativeToBridgedToken[targetChainId][_nativeToken] = _targetContract;
+
+    uint256 cachedTargetChainId = targetChainId;
+
+    if (nativeToBridgedToken[cachedTargetChainId][_nativeToken] != EMPTY) {
+      revert NativeToBridgedTokenAlreadySet(_nativeToken);
+    }
+
+    nativeToBridgedToken[cachedTargetChainId][_nativeToken] = _targetContract;
     bridgedToNativeToken[_targetContract] = _nativeToken;
     emit CustomContractSet(_nativeToken, _targetContract, msg.sender);
   }
@@ -426,13 +435,18 @@ contract TokenBridge is
   }
 
   /**
-   * @notice Provides a safe ERC20.decimals version which returns '18' as fallback value.
+   * @notice Provides a safe ERC20.decimals version which reverts when decimals are unknown
    *   Note Tokens with (decimals > 255) are not supported
    * @param _token The address of the ERC-20 token contract
    */
   function _safeDecimals(address _token) internal view returns (uint8) {
     (bool success, bytes memory data) = _token.staticcall(METADATA_DECIMALS);
-    return success && data.length == 32 ? abi.decode(data, (uint8)) : 18;
+
+    if (success && data.length == 32) {
+      return abi.decode(data, (uint8));
+    }
+
+    revert DecimalsAreUnknown(_token);
   }
 
   /**

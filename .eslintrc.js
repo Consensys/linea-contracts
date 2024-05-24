@@ -1,13 +1,9 @@
 module.exports = {
+  extends: ["../.eslintrc.js"],
   env: {
-    browser: false,
-    es2021: true,
-    mocha: true,
     node: true,
+    es2022: true,
   },
-  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
-  parser: "@typescript-eslint/parser",
-  plugins: ["@typescript-eslint", "prettier"],
   parserOptions: {
     ecmaVersion: 12,
   },

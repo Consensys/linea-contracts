@@ -7,6 +7,7 @@ import { L1MessageManager } from "./L1MessageManager.sol";
 import { IL1MessageService } from "../../interfaces/l1/IL1MessageService.sol";
 import { IGenericErrors } from "../../interfaces/IGenericErrors.sol";
 import { SparseMerkleTreeVerifier } from "../lib/SparseMerkleTreeVerifier.sol";
+import { TransientStorageHelpers } from "../lib/TransientStorageHelpers.sol";
 
 /**
  * @title Contract to manage cross-chain messaging on L1.
@@ -21,6 +22,7 @@ abstract contract L1MessageService is
   IGenericErrors
 {
   using SparseMerkleTreeVerifier for *;
+  using TransientStorageHelpers for *;
 
   /// @dev This is currently not in use, but is reserved for future upgrades.
   uint256 public systemMigrationBlock;
@@ -60,7 +62,6 @@ abstract contract L1MessageService is
     _grantRole(PAUSE_MANAGER_ROLE, _pauseManagerAddress);
 
     nextMessageNumber = 1;
-    _messageSender = DEFAULT_SENDER_ADDRESS;
   }
 
   /**
@@ -134,7 +135,7 @@ abstract contract L1MessageService is
       revert InvalidMerkleProof();
     }
 
-    _messageSender = _params.from;
+    TransientStorageHelpers.tstoreAddress(MESSAGE_SENDER_TRANSIENT_KEY, _params.from);
 
     (bool callSuccess, bytes memory returnData) = _params.to.call{ value: _params.value }(_params.data);
     if (!callSuccess) {
@@ -148,16 +149,17 @@ abstract contract L1MessageService is
       }
     }
 
-    _messageSender = DEFAULT_SENDER_ADDRESS;
+    TransientStorageHelpers.tstoreAddress(MESSAGE_SENDER_TRANSIENT_KEY, DEFAULT_MESSAGE_SENDER_TRANSIENT_VALUE);
 
     emit MessageClaimed(messageLeafHash);
   }
 
   /**
    * @notice Claims and delivers a cross-chain message.
-   * @dev _messageSender is set temporarily when claiming.
+   * @dev The message sender address is set temporarily in the transient storage when claiming.
+   * @return addr The message sender address that is stored temporarily in the transient storage when claiming.
    */
-  function sender() external view returns (address) {
-    return _messageSender;
+  function sender() external view returns (address addr) {
+    return TransientStorageHelpers.tloadAddress(MESSAGE_SENDER_TRANSIENT_KEY);
   }
 }

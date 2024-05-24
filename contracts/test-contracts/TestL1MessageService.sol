@@ -4,6 +4,11 @@ pragma solidity 0.8.24;
 import { L1MessageService } from "../messageService/l1/L1MessageService.sol";
 
 contract TestL1MessageService is L1MessageService {
+  /**
+   * @dev Thrown when the message has already been received.
+   */
+  error MessageAlreadyReceived(bytes32 messageHash);
+
   address public originalSender;
   bool private reentryDone;
 

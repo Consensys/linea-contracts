@@ -1,6 +1,6 @@
 import { ethers, upgrades } from "hardhat";
 import { getPermitData } from "../../../test/tokenBridge/utils/permitHelper";
-import { MockTokenBridge } from "../../../typechain-types";
+import { BridgedToken, MockTokenBridge } from "../../../typechain-types";
 import { deployBridgedTokenBeacon } from "../test/deployBridgedTokenBeacon";
 import { deployTokens } from "../test/deployTokens";
 
@@ -75,7 +75,7 @@ async function main() {
   const nonce = await abcToken.nonces(user.address);
   const permitData = await getPermitData(
     user,
-    abcToken,
+    abcToken as unknown as BridgedToken,
     nonce,
     parseInt(chainId.toString()),
     await l1TokenBridge.getAddress(),

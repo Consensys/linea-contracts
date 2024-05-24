@@ -5,6 +5,7 @@ import { ethers } from "hardhat";
 import { LineaVoyageXP } from "../typechain-types";
 import { DEFAULT_ADMIN_ROLE, MINTER_ROLE } from "./utils/constants";
 import { deployFromFactory } from "./utils/deployment";
+import { buildAccessErrorMessage, expectRevertWithCustomError, expectRevertWithReason } from "./utils/helpers";
 
 describe("Linea Voyage XP Token Tests", () => {
   let contract: LineaVoyageXP;
@@ -45,8 +46,9 @@ describe("Linea Voyage XP Token Tests", () => {
 
   describe("Single minting", () => {
     it("non-minter cannot mint tokens", async () => {
-      await expect(contract.connect(deployer).mint(deployer.address, 1000n)).to.be.revertedWith(
-        "AccessControl: account " + deployer.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.connect(deployer).mint(deployer.address, 1000n),
+        buildAccessErrorMessage(deployer, MINTER_ROLE),
       );
     });
 
@@ -59,8 +61,9 @@ describe("Linea Voyage XP Token Tests", () => {
 
   describe("Batch minting with one amount", () => {
     it("non-minter cannot mint tokens", async () => {
-      await expect(contract.batchMint([deployer.address], 1000n)).to.be.revertedWith(
-        "AccessControl: account " + deployer.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.batchMint([deployer.address], 1000n),
+        buildAccessErrorMessage(deployer, MINTER_ROLE),
       );
     });
 
@@ -80,8 +83,9 @@ describe("Linea Voyage XP Token Tests", () => {
 
   describe("Batch minting with varying amounts", () => {
     it("non-minter cannot mint tokens", async () => {
-      await expect(contract.batchMintMultiple([deployer.address], [1000n])).to.be.revertedWith(
-        "AccessControl: account " + deployer.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.batchMintMultiple([deployer.address], [1000n]),
+        buildAccessErrorMessage(deployer, MINTER_ROLE),
       );
     });
 
@@ -99,43 +103,50 @@ describe("Linea Voyage XP Token Tests", () => {
     });
 
     it("cannot mint when array lengths are different", async () => {
-      await expect(
+      await expectRevertWithReason(
         contract.connect(minter).batchMintMultiple([minter.address, deployer.address], [1000n]),
-      ).to.be.revertedWith("Array lengths do not match");
+        "Array lengths do not match",
+      );
     });
   });
 
   describe("Tokens are SoulBound", () => {
     it("cannot approve token amounts", async () => {
-      await expect(contract.connect(deployer).approve(minter.address, 1000n)).to.be.revertedWithCustomError(
+      await expectRevertWithCustomError(
         contract,
+        contract.connect(deployer).approve(minter.address, 1000n),
         "TokenIsSoulBound",
       );
     });
 
     it("cannot transfer token amounts", async () => {
-      await expect(contract.connect(deployer).transfer(minter.address, 1000n)).to.be.revertedWithCustomError(
+      await expectRevertWithCustomError(
         contract,
+        contract.connect(deployer).transfer(minter.address, 1000n),
         "TokenIsSoulBound",
       );
     });
 
     it("cannot transfer from allowance amounts", async () => {
-      await expect(
+      await expectRevertWithCustomError(
+        contract,
         contract.connect(deployer).transferFrom(deployer.address, minter.address, 1000n),
-      ).to.be.revertedWithCustomError(contract, "TokenIsSoulBound");
+        "TokenIsSoulBound",
+      );
     });
 
     it("cannot increase token allowance amounts", async () => {
-      await expect(contract.connect(deployer).increaseAllowance(minter.address, 1000n)).to.be.revertedWithCustomError(
+      await expectRevertWithCustomError(
         contract,
+        contract.connect(deployer).increaseAllowance(minter.address, 1000n),
         "TokenIsSoulBound",
       );
     });
 
     it("cannot decrease token allowance amounts", async () => {
-      await expect(contract.connect(deployer).decreaseAllowance(minter.address, 1000n)).to.be.revertedWithCustomError(
+      await expectRevertWithCustomError(
         contract,
+        contract.connect(deployer).decreaseAllowance(minter.address, 1000n),
         "TokenIsSoulBound",
       );
     });
@@ -145,32 +156,36 @@ describe("Linea Voyage XP Token Tests", () => {
     it("can renounce DEFAULT_ADMIN_ROLE role and not grant roles", async () => {
       await contract.connect(minter).renounceRole(DEFAULT_ADMIN_ROLE, minter.address);
 
-      await expect(contract.connect(minter).grantRole(DEFAULT_ADMIN_ROLE, minter.address)).to.be.revertedWith(
-        "AccessControl: account " + minter.address.toLowerCase() + " is missing role " + DEFAULT_ADMIN_ROLE,
+      await expectRevertWithReason(
+        contract.connect(minter).grantRole(DEFAULT_ADMIN_ROLE, minter.address),
+        buildAccessErrorMessage(minter, DEFAULT_ADMIN_ROLE),
       );
     });
 
     it("can renounce MINTER_ROLE role and not mint single address tokens", async () => {
       await contract.connect(minter).renounceRole(MINTER_ROLE, minter.address);
 
-      await expect(contract.connect(minter).mint(deployer.address, 1000n)).to.be.revertedWith(
-        "AccessControl: account " + minter.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.connect(minter).mint(deployer.address, 1000n),
+        buildAccessErrorMessage(minter, MINTER_ROLE),
       );
     });
 
     it("can renounce MINTER_ROLE role and not mint multiple address tokens", async () => {
       await contract.connect(minter).renounceRole(MINTER_ROLE, minter.address);
 
-      await expect(contract.connect(minter).batchMint([deployer.address], 1000n)).to.be.revertedWith(
-        "AccessControl: account " + minter.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.connect(minter).batchMint([deployer.address], 1000n),
+        buildAccessErrorMessage(minter, MINTER_ROLE),
       );
     });
 
     it("can renounce MINTER_ROLE role and not mint multiple address tokens with different amounts", async () => {
       await contract.connect(minter).renounceRole(MINTER_ROLE, minter.address);
 
-      await expect(contract.connect(minter).batchMintMultiple([deployer.address], [1000n])).to.be.revertedWith(
-        "AccessControl: account " + minter.address.toLowerCase() + " is missing role " + MINTER_ROLE,
+      await expectRevertWithReason(
+        contract.connect(minter).batchMintMultiple([deployer.address], [1000n]),
+        buildAccessErrorMessage(minter, MINTER_ROLE),
       );
     });
   });
