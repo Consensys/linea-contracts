@@ -1,8 +1,8 @@
 import { time as networkTime } from "@nomicfoundation/hardhat-network-helpers";
 import fs from "fs";
-import { ethers } from "hardhat";
 import path from "path";
-import { DEFAULT_MESSAGE_NONCE, MESSAGE_FEE, MESSAGE_VALUE_1ETH } from "./constants";
+import { expect } from "chai";
+import { DEFAULT_MESSAGE_NONCE, HASH_ZERO, MESSAGE_FEE, MESSAGE_VALUE_1ETH } from "./constants";
 import {
   DebugData,
   FormattedBlockData,
@@ -11,6 +11,9 @@ import {
   SubmissionData,
   SubmissionAndCompressedData,
   CalldataSubmissionData,
+  ParentSubmissionData,
+  ParentShnarfData,
+  ParentAndExpectedShnarf,
 } from "./types";
 
 import firstCompressedDataContent from "../testData/compressedData/blocks-1-46.json";
@@ -26,12 +29,11 @@ const COMPRESSED_SUBMISSION_DATA = [
 ];
 
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { AbiCoder } from "ethers";
-import { ILineaRollup } from "../../typechain-types";
+import { AbiCoder, ethers } from "ethers";
 import firstCompressedDataContent_multiple from "../testData/compressedData/multipleProofs/blocks-1-46.json";
-import fourthCompressedDataContent_multiple from "../testData/compressedData/multipleProofs/blocks-120-153.json";
 import secondCompressedDataContent_multiple from "../testData/compressedData/multipleProofs/blocks-47-81.json";
 import thirdCompressedDataContent_multiple from "../testData/compressedData/multipleProofs/blocks-82-119.json";
+import fourthCompressedDataContent_multiple from "../testData/compressedData/multipleProofs/blocks-120-153.json";
 
 const COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF = [
   firstCompressedDataContent_multiple,
@@ -180,10 +182,10 @@ export const generateL2MessagingBlocksOffsets = (start: number, end: number) =>
 export async function generateFinalizationData(overrides?: Partial<FinalizationData>): Promise<FinalizationData> {
   return {
     aggregatedProof: generateRandomBytes(928),
+    finalBlockInData: 99n,
+    lastFinalizedShnarf: generateParentSubmissionDataForIndex(1).shnarf,
+    shnarfData: generateParentShnarfData(1),
     parentStateRootHash: generateRandomBytes(32),
-    dataHashes: [generateRandomBytes(32)],
-    dataParentHash: generateRandomBytes(32),
-    finalBlockNumber: 812502n,
     lastFinalizedTimestamp: BigInt((await networkTime.latest()) - 2),
     finalTimestamp: BigInt(await networkTime.latest()),
     l1RollingHash: generateRandomBytes(32),
@@ -191,33 +193,15 @@ export async function generateFinalizationData(overrides?: Partial<FinalizationD
     l2MerkleRoots: [generateRandomBytes(32)],
     l2MerkleTreesDepth: 5n,
     l2MessagingBlocksOffsets: generateL2MessagingBlocksOffsets(1, 1),
+    lastFinalizedL1RollingHash: HASH_ZERO,
+    lastFinalizedL1RollingHashMessageNumber: 0n,
     ...overrides,
-  };
-}
-
-export function createLineaRollupFinalizationData(
-  finalizationData: FinalizationData,
-): ILineaRollup.FinalizationDataStruct {
-  return {
-    parentStateRootHash: finalizationData.parentStateRootHash,
-    dataHashes: finalizationData.dataHashes,
-    dataParentHash: finalizationData.dataParentHash,
-    finalBlockNumber: finalizationData.finalBlockNumber,
-    lastFinalizedTimestamp: finalizationData.lastFinalizedTimestamp,
-    finalTimestamp: finalizationData.finalTimestamp,
-    l1RollingHash: finalizationData.l1RollingHash,
-    l1RollingHashMessageNumber: finalizationData.l1RollingHashMessageNumber,
-    l2MerkleRoots: finalizationData.l2MerkleRoots,
-    l2MerkleTreesDepth: finalizationData.l2MerkleTreesDepth,
-    l2MessagingBlocksOffsets: finalizationData.l2MessagingBlocksOffsets,
   };
 }
 
 export function generateCallDataSubmission(startDataIndex: number, finalDataIndex: number): CalldataSubmissionData[] {
   return COMPRESSED_SUBMISSION_DATA.slice(startDataIndex, finalDataIndex).map((data) => {
     const returnData = {
-      parentStateRootHash: data.parentStateRootHash,
-      dataParentHash: data.parentDataHash,
       finalStateRootHash: data.finalStateRootHash,
       firstBlockInData: BigInt(data.conflationOrder.startingBlockNumber),
       finalBlockInData: BigInt(data.conflationOrder.upperBoundaries.slice(-1)[0]),
@@ -226,6 +210,101 @@ export function generateCallDataSubmission(startDataIndex: number, finalDataInde
     };
     return returnData;
   });
+}
+
+export function generateParentShnarfData(index: number, multiple?: boolean): ParentShnarfData {
+  if (index === 0) {
+    return {
+      parentShnarf: HASH_ZERO,
+      snarkHash: HASH_ZERO,
+      finalStateRootHash: multiple
+        ? COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[0].parentStateRootHash
+        : COMPRESSED_SUBMISSION_DATA[0].parentStateRootHash,
+      dataEvaluationPoint: HASH_ZERO,
+      dataEvaluationClaim: HASH_ZERO,
+    };
+  }
+  const parentSubmissionData = multiple
+    ? COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index - 1]
+    : COMPRESSED_SUBMISSION_DATA[index - 1];
+
+  return {
+    parentShnarf: parentSubmissionData.prevShnarf,
+    snarkHash: parentSubmissionData.snarkHash,
+    finalStateRootHash: parentSubmissionData.finalStateRootHash,
+    dataEvaluationPoint: parentSubmissionData.expectedX,
+    dataEvaluationClaim: parentSubmissionData.expectedY,
+  };
+}
+
+export function generateExpectedParentSubmissionHash(
+  firstBlockInData: bigint,
+  finalBlockInData: bigint,
+  finalStateRootHash: string,
+  shnarf: string,
+  dataParentHash: string,
+): string {
+  return generateKeccak256(
+    ["uint256", "uint256", "bytes32", "bytes32", "bytes32"],
+    [firstBlockInData, finalBlockInData, finalStateRootHash, shnarf, dataParentHash],
+  );
+}
+
+export function generateParentSubmissionDataForIndex(index: number): ParentSubmissionData {
+  if (index === 0) {
+    return {
+      finalStateRootHash: COMPRESSED_SUBMISSION_DATA[0].parentStateRootHash,
+      firstBlockInData: 0n,
+      finalBlockInData: 0n,
+      shnarf: generateKeccak256(
+        ["bytes32", "bytes32", "bytes32", "bytes32", "bytes32"],
+        [HASH_ZERO, HASH_ZERO, COMPRESSED_SUBMISSION_DATA[0].parentStateRootHash, HASH_ZERO, HASH_ZERO],
+      ),
+    };
+  }
+
+  return {
+    finalStateRootHash: COMPRESSED_SUBMISSION_DATA[index - 1].finalStateRootHash,
+    firstBlockInData: BigInt(COMPRESSED_SUBMISSION_DATA[index - 1].conflationOrder.startingBlockNumber),
+    finalBlockInData: BigInt(COMPRESSED_SUBMISSION_DATA[index - 1].conflationOrder.upperBoundaries.slice(-1)[0]),
+    shnarf: COMPRESSED_SUBMISSION_DATA[index - 1].expectedShnarf,
+  };
+}
+
+export function generateParentAndExpectedShnarfForIndex(index: number): ParentAndExpectedShnarf {
+  return {
+    parentShnarf: COMPRESSED_SUBMISSION_DATA[index].prevShnarf,
+    expectedShnarf: COMPRESSED_SUBMISSION_DATA[index].expectedShnarf,
+  };
+}
+
+export function generateParentAndExpectedShnarfForMulitpleIndex(index: number): ParentAndExpectedShnarf {
+  return {
+    parentShnarf: COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index].prevShnarf,
+    expectedShnarf: COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index].expectedShnarf,
+  };
+}
+
+export function generateParentSubmissionDataForIndexForMultiple(index: number): ParentSubmissionData {
+  if (index === 0) {
+    return {
+      finalStateRootHash: COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[0].parentStateRootHash,
+      firstBlockInData: 0n,
+      finalBlockInData: 0n,
+      shnarf: generateKeccak256(
+        ["bytes32", "bytes32", "bytes32", "bytes32", "bytes32"],
+        [HASH_ZERO, HASH_ZERO, COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[0].parentStateRootHash, HASH_ZERO, HASH_ZERO],
+      ),
+    };
+  }
+  return {
+    finalStateRootHash: COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index - 1].finalStateRootHash,
+    firstBlockInData: BigInt(COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index - 1].conflationOrder.startingBlockNumber),
+    finalBlockInData: BigInt(
+      COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index - 1].conflationOrder.upperBoundaries.slice(-1)[0],
+    ),
+    shnarf: COMPRESSED_SUBMISSION_DATA_MULTIPLE_PROOF[index - 1].expectedShnarf,
+  };
 }
 
 export function generateSubmissionData(startDataIndex: number, finalDataIndex: number): SubmissionAndCompressedData[] {
@@ -277,6 +356,7 @@ export function generateCallDataSubmissionMultipleProofs(
       finalBlockInData: BigInt(data.conflationOrder.upperBoundaries.slice(-1)[0]),
       snarkHash: data.snarkHash,
       compressedData: ethers.hexlify(ethers.decodeBase64(data.compressedData)),
+      parentShnarf: data.prevShnarf,
     };
     return returnData;
   });
@@ -312,4 +392,31 @@ export function generateFinalizationDataFromJSON(parsedJSONData: any): Finalizat
     l2MerkleTreesDepth: BigInt(data.l2MerkleTreesDepth),
     l2MessagingBlocksOffsets: data.l2MessagingBlocksOffsets,
   };
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function expectRevertWithCustomError(
+  contract: any,
+  asyncCall: Promise<any>,
+  errorName: string,
+  errorArgs: any[] = [],
+) {
+  await expect(asyncCall)
+    .to.be.revertedWithCustomError(contract, errorName)
+    .withArgs(...errorArgs);
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function expectRevertWithReason(asyncCall: Promise<any>, reason: string) {
+  await expect(asyncCall).to.be.revertedWith(reason);
+}
+export function buildAccessErrorMessage(account: SignerWithAddress, role: string): string {
+  return `AccessControl: account ${account.address.toLowerCase()} is missing role ${role}`;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function expectEvent(contract: any, asyncCall: Promise<any>, eventName: string, eventArgs: any[] = []) {
+  await expect(asyncCall)
+    .to.emit(contract, eventName)
+    .withArgs(...eventArgs);
 }

@@ -51,6 +51,8 @@ abstract contract L1MessageManager is L1MessageManagerV1, IL1MessageManager {
   /**
    * @notice Add the L2 merkle roots to the storage.
    * @dev This function is called during block finalization.
+   * @dev The _treeDepth does not need to be checked to be non-zero as it is,
+   * already enforced to be non-zero in the circuit, and used in the proof's public input.
    * @param _newRoots New L2 merkle roots.
    */
   function _addL2MerkleRoots(bytes32[] calldata _newRoots, uint256 _treeDepth) internal {

@@ -12,6 +12,11 @@ contract TestL1MessageServiceMerkleProof is L1MessageService {
   address public originalSender;
   bool private reentryDone;
 
+  /**
+   * @dev Thrown when the message has already been received.
+   */
+  error MessageAlreadyReceived(bytes32 messageHash);
+
   function initialize(
     address _limitManagerAddress,
     address _pauserManagerAddress,

@@ -3,9 +3,14 @@ import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { TestLineaRollup, LineaRollupInit__factory } from "../typechain-types";
-import { GENESIS_L2_TIMESTAMP, INITIAL_WITHDRAW_LIMIT, ONE_DAY_IN_SECONDS } from "./utils/constants";
+import {
+  GENESIS_L2_TIMESTAMP,
+  INITIALIZED_ALREADY_MESSAGE,
+  INITIAL_WITHDRAW_LIMIT,
+  ONE_DAY_IN_SECONDS,
+} from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
-import { generateRandomBytes } from "./utils/helpers";
+import { expectRevertWithReason, generateRandomBytes } from "./utils/helpers";
 
 describe("LineaRollup Init contract", () => {
   let LineaRollup: TestLineaRollup;
@@ -85,8 +90,9 @@ describe("LineaRollup Init contract", () => {
         unsafeAllow: ["constructor"],
       });
 
-      await expect(lineaRollupContract.initializeV2(l2BlockNumber, parentStateRootHash)).to.be.revertedWith(
-        "Initializable: contract is already initialized",
+      await expectRevertWithReason(
+        lineaRollupContract.initializeV2(l2BlockNumber, parentStateRootHash),
+        INITIALIZED_ALREADY_MESSAGE,
       );
     });
   });

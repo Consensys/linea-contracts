@@ -16,7 +16,9 @@ abstract contract ZkEvmV2 is Initializable, AccessControlUpgradeable, L1MessageS
   uint256 internal constant MODULO_R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
   bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
+  /// @dev DEPRECATED in favor of currentFinalizedState hash.
   uint256 public currentTimestamp;
+
   uint256 public currentL2BlockNumber;
 
   mapping(uint256 blockNumber => bytes32 stateRootHash) public stateRootHashes;
@@ -34,13 +36,15 @@ abstract contract ZkEvmV2 is Initializable, AccessControlUpgradeable, L1MessageS
    * @param _proof The proof to be verified with the proof type verifier contract.
    * @param _parentStateRootHash The beginning roothash to start with.
    * @param _finalizedL2BlockNumber The final L2 block number being finalized.
+   * @param _finalStateRootHash The state root finalized up until.
    */
   function _verifyProof(
     uint256 _publicInputHash,
     uint256 _proofType,
     bytes calldata _proof,
     bytes32 _parentStateRootHash,
-    uint256 _finalizedL2BlockNumber
+    uint256 _finalizedL2BlockNumber,
+    bytes32 _finalStateRootHash
   ) internal {
     uint256[] memory input = new uint256[](1);
     input[0] = _publicInputHash;
@@ -56,10 +60,6 @@ abstract contract ZkEvmV2 is Initializable, AccessControlUpgradeable, L1MessageS
       revert InvalidProof();
     }
 
-    emit BlocksVerificationDone(
-      _finalizedL2BlockNumber,
-      _parentStateRootHash,
-      stateRootHashes[_finalizedL2BlockNumber]
-    );
+    emit BlocksVerificationDone(_finalizedL2BlockNumber, _parentStateRootHash, _finalStateRootHash);
   }
 }

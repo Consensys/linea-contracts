@@ -25,14 +25,4 @@ interface IL1MessageManagerV1 {
    * @dev Thrown when the message has already been claimed.
    */
   error MessageDoesNotExistOrHasAlreadyBeenClaimed(bytes32 messageHash);
-
-  /**
-   * @dev Thrown when the message has already been received.
-   */
-  error MessageAlreadyReceived(bytes32 messageHash);
-
-  /**
-   * @dev Thrown when the L1->L2 message has not been sent.
-   */
-  error L1L2MessageNotSent(bytes32 messageHash);
 }

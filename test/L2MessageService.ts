@@ -4,12 +4,14 @@ import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 import { TestL2MessageService, TestReceivingContract } from "../typechain-types";
 import {
+  ADDRESS_ZERO,
   BLOCK_COINBASE,
   DEFAULT_ADMIN_ROLE,
   EMPTY_CALLDATA,
   GENERAL_PAUSE_TYPE,
   INBOX_STATUS_CLAIMED,
   INBOX_STATUS_RECEIVED,
+  INITIALIZED_ALREADY_MESSAGE,
   INITIAL_WITHDRAW_LIMIT,
   L1_L2_MESSAGE_SETTER_ROLE,
   L1_L2_PAUSE_TYPE,
@@ -25,9 +27,13 @@ import {
 } from "./utils/constants";
 import { deployUpgradableFromFactory } from "./utils/deployment";
 import {
+  buildAccessErrorMessage,
   calculateRollingHash,
   calculateRollingHashFromCollection,
   encodeSendMessage,
+  expectEvent,
+  expectRevertWithCustomError,
+  expectRevertWithReason,
   generateKeccak256Hash,
 } from "./utils/helpers";
 
@@ -44,7 +50,7 @@ describe("L2MessageService", () => {
     return deployUpgradableFromFactory("TestL2MessageService", [
       securityCouncil.address,
       l1l2MessageSetter.address,
-      86400,
+      ONE_DAY_IN_SECONDS,
       INITIAL_WITHDRAW_LIMIT,
     ]) as unknown as Promise<TestL2MessageService>;
   }
@@ -85,65 +91,65 @@ describe("L2MessageService", () => {
     });
 
     it("Should fail to deploy missing limit amount", async () => {
-      await expect(
-        deployUpgradableFromFactory("TestL2MessageService", [
-          securityCouncil.address,
-          l1l2MessageSetter.address,
-          86400,
-          0,
-        ]),
-      ).to.be.revertedWithCustomError(l2MessageService, "LimitIsZero");
+      const deployCall = deployUpgradableFromFactory("TestL2MessageService", [
+        securityCouncil.address,
+        l1l2MessageSetter.address,
+        ONE_DAY_IN_SECONDS,
+        0,
+      ]);
+
+      await expectRevertWithCustomError(l2MessageService, deployCall, "LimitIsZero");
     });
 
     it("Should fail to deploy missing period", async () => {
-      await expect(
-        deployUpgradableFromFactory("TestL2MessageService", [
-          securityCouncil.address,
-          l1l2MessageSetter.address,
-          0,
-          MESSAGE_VALUE_1ETH + MESSAGE_VALUE_1ETH,
-        ]),
-      ).to.be.revertedWithCustomError(l2MessageService, "PeriodIsZero");
+      const deployCall = deployUpgradableFromFactory("TestL2MessageService", [
+        securityCouncil.address,
+        l1l2MessageSetter.address,
+        0,
+        MESSAGE_VALUE_1ETH + MESSAGE_VALUE_1ETH,
+      ]);
+
+      await expectRevertWithCustomError(l2MessageService, deployCall, "PeriodIsZero");
     });
 
     it("Should fail with empty securityCouncil address", async () => {
-      await expect(
-        deployUpgradableFromFactory("TestL2MessageService", [
-          ethers.ZeroAddress,
-          l1l2MessageSetter.address,
-          ONE_DAY_IN_SECONDS,
-          INITIAL_WITHDRAW_LIMIT,
-        ]),
-      ).to.be.revertedWithCustomError(l2MessageService, "ZeroAddressNotAllowed");
+      const deployCall = deployUpgradableFromFactory("TestL2MessageService", [
+        ADDRESS_ZERO,
+        l1l2MessageSetter.address,
+        ONE_DAY_IN_SECONDS,
+        INITIAL_WITHDRAW_LIMIT,
+      ]);
+
+      await expectRevertWithCustomError(l2MessageService, deployCall, "ZeroAddressNotAllowed");
     });
 
     it("Should fail with empty l1l2MessageSetter address", async () => {
-      await expect(
-        deployUpgradableFromFactory("TestL2MessageService", [
-          securityCouncil.address,
-          ethers.ZeroAddress,
-          ONE_DAY_IN_SECONDS,
-          INITIAL_WITHDRAW_LIMIT,
-        ]),
-      ).to.be.revertedWithCustomError(l2MessageService, "ZeroAddressNotAllowed");
+      const deployCall = deployUpgradableFromFactory("TestL2MessageService", [
+        securityCouncil.address,
+        ADDRESS_ZERO,
+        ONE_DAY_IN_SECONDS,
+        INITIAL_WITHDRAW_LIMIT,
+      ]);
+
+      await expectRevertWithCustomError(l2MessageService, deployCall, "ZeroAddressNotAllowed");
     });
 
     it("Should fail on second initialisation", async () => {
-      await expect(
-        l2MessageService.initialize(
-          securityCouncil.address,
-          l1l2MessageSetter.address,
-          ONE_DAY_IN_SECONDS,
-          INITIAL_WITHDRAW_LIMIT,
-        ),
-      ).to.be.revertedWith("Initializable: contract is already initialized");
+      const deployCall = l2MessageService.initialize(
+        securityCouncil.address,
+        l1l2MessageSetter.address,
+        ONE_DAY_IN_SECONDS,
+        INITIAL_WITHDRAW_LIMIT,
+      );
+
+      await expectRevertWithReason(deployCall, INITIALIZED_ALREADY_MESSAGE);
     });
 
     it("Can upgrade existing contract", async () => {
       const contract = await deployUpgradableFromFactory("L2MessageServiceLineaMainnet", [
         securityCouncil.address,
         l1l2MessageSetter.address,
-        86400,
+        ONE_DAY_IN_SECONDS,
         INITIAL_WITHDRAW_LIMIT,
       ]);
 
@@ -164,13 +170,11 @@ describe("L2MessageService", () => {
       it("Should fail to send if the contract is paused", async () => {
         await l2MessageService.connect(securityCouncil).pauseByType(GENERAL_PAUSE_TYPE);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT }),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "IsPaused")
-          .withArgs(GENERAL_PAUSE_TYPE);
+        const sendMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "IsPaused", [GENERAL_PAUSE_TYPE]);
       });
     });
 
@@ -178,23 +182,23 @@ describe("L2MessageService", () => {
       it("Should fail to send if the L2->L1 messaging service is paused", async () => {
         await l2MessageService.connect(securityCouncil).pauseByType(L2_L1_PAUSE_TYPE);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT }),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "IsPaused")
-          .withArgs(L2_L1_PAUSE_TYPE);
+        const sendMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "IsPaused", [L2_L1_PAUSE_TYPE]);
       });
     });
 
     describe("When the contract is not paused", () => {
       it("Should fail when the fee is higher than the amount sent", async () => {
-        await expect(
-          l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
             value: MESSAGE_FEE - ethers.parseEther("0.01"),
-          }),
-        ).to.be.revertedWithCustomError(l2MessageService, "ValueSentTooLow");
+          });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "ValueSentTooLow");
       });
 
       it("Should fail when the coinbase fee transfer fails", async () => {
@@ -202,15 +206,15 @@ describe("L2MessageService", () => {
 
         await ethers.provider.send("hardhat_setCoinbase", [await l2MessageService.getAddress()]);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
-              value: MINIMUM_FEE + MINIMUM_FEE,
-            }),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "FeePaymentFailed")
-          .withArgs(await l2MessageService.getAddress());
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
+            value: MINIMUM_FEE + MINIMUM_FEE,
+          });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "FeePaymentFailed", [
+          await l2MessageService.getAddress(),
+        ]);
 
         await ethers.provider.send("hardhat_setCoinbase", [BLOCK_COINBASE]);
       });
@@ -218,19 +222,23 @@ describe("L2MessageService", () => {
       it("Should fail when the minimumFee is higher than the amount sent", async () => {
         await l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE);
 
-        await expect(
-          l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
             value: MESSAGE_FEE + ethers.parseEther("0.01"),
-          }),
-        ).to.be.revertedWithCustomError(l2MessageService, "FeeTooLow");
+          });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "FeeTooLow");
       });
 
       it("Should fail when the to address is address 0", async () => {
-        await expect(
-          l2MessageService.connect(admin).canSendMessage(ethers.ZeroAddress, MESSAGE_FEE, "0x", {
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .canSendMessage(ADDRESS_ZERO, MESSAGE_FEE, EMPTY_CALLDATA, {
             value: MESSAGE_FEE,
-          }),
-        ).to.be.revertedWithCustomError(l2MessageService, "ZeroAddressNotAllowed");
+          });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "ZeroAddressNotAllowed");
       });
 
       it("Should increase the balance of the coinbase with the minimumFee", async () => {
@@ -248,14 +256,20 @@ describe("L2MessageService", () => {
       });
 
       it("Should succeed if 'MinimumFeeChanged' event is emitted", async () => {
-        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE))
-          .to.emit(l2MessageService, "MinimumFeeChanged")
-          .withArgs(0, MINIMUM_FEE, securityCouncil.address);
+        await expectEvent(
+          l2MessageService,
+          l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE),
+          "MinimumFeeChanged",
+          [0, MINIMUM_FEE, securityCouncil.address],
+        );
 
         // Testing non-zero transition
-        await expect(l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE + 1n))
-          .to.emit(l2MessageService, "MinimumFeeChanged")
-          .withArgs(MINIMUM_FEE, MINIMUM_FEE + 1n, securityCouncil.address);
+        await expectEvent(
+          l2MessageService,
+          l2MessageService.connect(securityCouncil).setMinimumFee(MINIMUM_FEE + 1n),
+          "MinimumFeeChanged",
+          [MINIMUM_FEE, MINIMUM_FEE + 1n, securityCouncil.address],
+        );
       });
 
       it("Should succeed if 'MessageSent' event is emitted", async () => {
@@ -271,23 +285,22 @@ describe("L2MessageService", () => {
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
-              value: MESSAGE_VALUE_1ETH,
-            }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            securityCouncil.address,
-            notAuthorizedAccount.address,
-            MESSAGE_FEE,
-            MESSAGE_VALUE_1ETH - MESSAGE_FEE - MINIMUM_FEE,
-            1,
-            EMPTY_CALLDATA,
-            messageHash,
-          );
+        const sendMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE + MINIMUM_FEE, EMPTY_CALLDATA, {
+            value: MESSAGE_VALUE_1ETH,
+          });
+        const eventArgs = [
+          securityCouncil.address,
+          notAuthorizedAccount.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH - MESSAGE_FEE - MINIMUM_FEE,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ];
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", eventArgs);
       });
 
       it("Should send an ether only message with fees emitting the MessageSent event", async () => {
@@ -297,17 +310,26 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, "0x", {
+        const eventArgs = [
+          admin.address,
+          notAuthorizedAccount.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ];
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
             value: MESSAGE_FEE + MESSAGE_VALUE_1ETH,
-          }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(admin.address, notAuthorizedAccount.address, MESSAGE_FEE, MESSAGE_VALUE_1ETH, 1, "0x", messageHash);
+          });
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", eventArgs);
       });
 
       it("Should send max limit ether only message with no fee emitting the MessageSent event", async () => {
@@ -317,55 +339,54 @@ describe("L2MessageService", () => {
           0n,
           INITIAL_WITHDRAW_LIMIT,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            securityCouncil.address,
-            notAuthorizedAccount.address,
-            0,
-            INITIAL_WITHDRAW_LIMIT,
-            1,
-            "0x",
-            messageHash,
-          );
+        const sendMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .sendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
+        const eventArgs = [
+          securityCouncil.address,
+          notAuthorizedAccount.address,
+          0,
+          INITIAL_WITHDRAW_LIMIT,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ];
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", eventArgs);
       });
 
       it("Should revert with send over max limit amount only", async () => {
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT + 1n }),
-        ).to.revertedWithCustomError(l2MessageService, "RateLimitExceeded");
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT + 1n });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "RateLimitExceeded");
       });
 
       it("Should revert with send over max limit amount and fees", async () => {
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, 1, "0x", { value: INITIAL_WITHDRAW_LIMIT + 1n }),
-        ).to.revertedWithCustomError(l2MessageService, "RateLimitExceeded");
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, 1, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT + 1n });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "RateLimitExceeded");
       });
 
       it("Should fail when the rate limit would be exceeded - multi transactions", async () => {
-        await l2MessageService
-          .connect(admin)
-          .sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, "0x", { value: MESSAGE_FEE + MESSAGE_VALUE_1ETH });
+        await l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MESSAGE_FEE, EMPTY_CALLDATA, {
+          value: MESSAGE_FEE + MESSAGE_VALUE_1ETH,
+        });
 
         const breachingAmount = INITIAL_WITHDRAW_LIMIT - MESSAGE_FEE - MESSAGE_VALUE_1ETH + 1n;
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: breachingAmount }),
-        ).to.revertedWithCustomError(l2MessageService, "RateLimitExceeded");
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: breachingAmount });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "RateLimitExceeded");
       });
 
       it("Should not accrue rate limit while sending transaction with coinbaseFee only", async () => {
@@ -374,16 +395,29 @@ describe("L2MessageService", () => {
 
         const initialRateLimitUsed = await l2MessageService.currentPeriodAmountInWei();
 
-        const expectedBytes = await encodeSendMessage(admin.address, notAuthorizedAccount.address, 0n, 0n, 1n, "0x");
+        const expectedBytes = await encodeSendMessage(
+          admin.address,
+          notAuthorizedAccount.address,
+          0n,
+          0n,
+          1n,
+          EMPTY_CALLDATA,
+        );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE, "0x", { value: MINIMUM_FEE }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(admin.address, notAuthorizedAccount.address, 0n, 0n, 1, "0x", messageHash);
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE, EMPTY_CALLDATA, { value: MINIMUM_FEE });
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", [
+          admin.address,
+          notAuthorizedAccount.address,
+          0n,
+          0n,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ]);
 
         const postCoinbaseBalance = await ethers.provider.getBalance(BLOCK_COINBASE);
         await expect(postCoinbaseBalance).to.be.gt(initialCoinbaseBalance);
@@ -404,25 +438,23 @@ describe("L2MessageService", () => {
           MESSAGE_VALUE_1ETH - MINIMUM_FEE,
           0n,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MESSAGE_VALUE_1ETH, "0x", { value: MESSAGE_VALUE_1ETH }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            admin.address,
-            notAuthorizedAccount.address,
-            MESSAGE_VALUE_1ETH - MINIMUM_FEE,
-            0,
-            1,
-            "0x",
-            messageHash,
-          );
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MESSAGE_VALUE_1ETH, EMPTY_CALLDATA, { value: MESSAGE_VALUE_1ETH });
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", [
+          admin.address,
+          notAuthorizedAccount.address,
+          MESSAGE_VALUE_1ETH - MINIMUM_FEE,
+          0,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ]);
 
         const postCoinbaseBalance = await ethers.provider.getBalance(BLOCK_COINBASE);
 
@@ -444,25 +476,26 @@ describe("L2MessageService", () => {
           MINIMUM_FEE + MESSAGE_FEE - MINIMUM_FEE,
           MESSAGE_VALUE_1ETH - (MINIMUM_FEE + MESSAGE_FEE),
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService.connect(admin).sendMessage(notAuthorizedAccount.address, MINIMUM_FEE + MESSAGE_FEE, "0x", {
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE + MESSAGE_FEE, EMPTY_CALLDATA, {
             value: MESSAGE_VALUE_1ETH,
-          }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            admin.address,
-            notAuthorizedAccount.address,
-            MINIMUM_FEE + MESSAGE_FEE - MINIMUM_FEE,
-            MESSAGE_VALUE_1ETH - (MINIMUM_FEE + MESSAGE_FEE),
-            1,
-            "0x",
-            messageHash,
-          );
+          });
+        const eventArgs = [
+          admin.address,
+          notAuthorizedAccount.address,
+          MINIMUM_FEE + MESSAGE_FEE - MINIMUM_FEE,
+          MESSAGE_VALUE_1ETH - (MINIMUM_FEE + MESSAGE_FEE),
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ];
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", eventArgs);
 
         const postCoinbaseBalance = await ethers.provider.getBalance(BLOCK_COINBASE);
 
@@ -484,25 +517,24 @@ describe("L2MessageService", () => {
           0n,
           MESSAGE_VALUE_1ETH - MINIMUM_FEE,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE, "0x", { value: MESSAGE_VALUE_1ETH }),
-        )
-          .to.emit(l2MessageService, "MessageSent")
-          .withArgs(
-            admin.address,
-            notAuthorizedAccount.address,
-            0n,
-            MESSAGE_VALUE_1ETH - MINIMUM_FEE,
-            1,
-            "0x",
-            messageHash,
-          );
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .sendMessage(notAuthorizedAccount.address, MINIMUM_FEE, EMPTY_CALLDATA, { value: MESSAGE_VALUE_1ETH });
+        const eventArgs = [
+          admin.address,
+          notAuthorizedAccount.address,
+          0n,
+          MESSAGE_VALUE_1ETH - MINIMUM_FEE,
+          1,
+          EMPTY_CALLDATA,
+          messageHash,
+        ];
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageSent", eventArgs);
 
         const postCoinbaseBalance = await ethers.provider.getBalance(BLOCK_COINBASE);
 
@@ -519,21 +551,19 @@ describe("L2MessageService", () => {
       it("Should revert if the contract is paused", async () => {
         await l2MessageService.connect(securityCouncil).pauseByType(GENERAL_PAUSE_TYPE);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .claimMessage(
-              securityCouncil.address,
-              notAuthorizedAccount.address,
-              MESSAGE_FEE,
-              MESSAGE_VALUE_1ETH,
-              notAuthorizedAccount.address,
-              EMPTY_CALLDATA,
-              1,
-            ),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "IsPaused")
-          .withArgs(GENERAL_PAUSE_TYPE);
+        const claimMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .claimMessage(
+            securityCouncil.address,
+            notAuthorizedAccount.address,
+            MESSAGE_FEE,
+            MESSAGE_VALUE_1ETH,
+            notAuthorizedAccount.address,
+            EMPTY_CALLDATA,
+            1,
+          );
+
+        await expectRevertWithCustomError(l2MessageService, claimMessageCall, "IsPaused", [GENERAL_PAUSE_TYPE]);
       });
     });
 
@@ -541,21 +571,19 @@ describe("L2MessageService", () => {
       it("Should revert if the L1->L2 messaging service is paused", async () => {
         await l2MessageService.connect(securityCouncil).pauseByType(L1_L2_PAUSE_TYPE);
 
-        await expect(
-          l2MessageService
-            .connect(securityCouncil)
-            .claimMessage(
-              securityCouncil.address,
-              notAuthorizedAccount.address,
-              MESSAGE_FEE,
-              MESSAGE_VALUE_1ETH,
-              notAuthorizedAccount.address,
-              EMPTY_CALLDATA,
-              1,
-            ),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "IsPaused")
-          .withArgs(L1_L2_PAUSE_TYPE);
+        const claimMessageCall = l2MessageService
+          .connect(securityCouncil)
+          .claimMessage(
+            securityCouncil.address,
+            notAuthorizedAccount.address,
+            MESSAGE_FEE,
+            MESSAGE_VALUE_1ETH,
+            notAuthorizedAccount.address,
+            EMPTY_CALLDATA,
+            1,
+          );
+
+        await expectRevertWithCustomError(l2MessageService, claimMessageCall, "IsPaused", [L1_L2_PAUSE_TYPE]);
       });
     });
 
@@ -567,7 +595,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
@@ -580,19 +608,17 @@ describe("L2MessageService", () => {
           .connect(l1l2MessageSetter)
           .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
-        await expect(
-          l2MessageService.claimMessage(
-            admin.address,
-            notAuthorizedAccount.address,
-            MESSAGE_FEE,
-            MESSAGE_VALUE_1ETH,
-            postmanAddress.address,
-            "0x",
-            1,
-          ),
-        )
-          .to.emit(l2MessageService, "MessageClaimed")
-          .withArgs(ethers.keccak256(expectedBytes));
+        const sendMessageCall = l2MessageService.claimMessage(
+          admin.address,
+          notAuthorizedAccount.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          postmanAddress.address,
+          EMPTY_CALLDATA,
+          1,
+        );
+
+        await expectEvent(l2MessageService, sendMessageCall, "MessageClaimed", [ethers.keccak256(expectedBytes)]);
       });
 
       it("Should fail when the message hash does not exist", async () => {
@@ -607,19 +633,22 @@ describe("L2MessageService", () => {
 
         const messageHash = ethers.keccak256(expectedBytes);
 
-        await expect(
-          l2MessageService.claimMessage(
-            await l2MessageService.getAddress(),
-            notAuthorizedAccount.address,
-            MESSAGE_FEE,
-            MESSAGE_VALUE_1ETH,
-            ethers.ZeroAddress,
-            EMPTY_CALLDATA,
-            1,
-          ),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed")
-          .withArgs(messageHash);
+        const claimMessageCall = l2MessageService.claimMessage(
+          await l2MessageService.getAddress(),
+          notAuthorizedAccount.address,
+          MESSAGE_FEE,
+          MESSAGE_VALUE_1ETH,
+          ADDRESS_ZERO,
+          EMPTY_CALLDATA,
+          1,
+        );
+
+        await expectRevertWithCustomError(
+          l2MessageService,
+          claimMessageCall,
+          "MessageDoesNotExistOrHasAlreadyBeenClaimed",
+          [messageHash],
+        );
       });
 
       it("Should execute the claim message and send fees to recipient, left over fee to destination", async () => {
@@ -865,13 +894,11 @@ describe("L2MessageService", () => {
       it("Should fail to send if the contract is paused", async () => {
         await l2MessageService.connect(securityCouncil).pauseByType(GENERAL_PAUSE_TYPE);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .canSendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT }),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "IsPaused")
-          .withArgs(GENERAL_PAUSE_TYPE);
+        const sendMessageCall = l2MessageService
+          .connect(admin)
+          .canSendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
+
+        await expectRevertWithCustomError(l2MessageService, sendMessageCall, "IsPaused", [GENERAL_PAUSE_TYPE]);
 
         const usedAmount = await l2MessageService.currentPeriodAmountInWei();
         expect(usedAmount).to.be.equal(0);
@@ -884,7 +911,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
@@ -903,7 +930,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           postmanAddress.address,
-          "0x",
+          EMPTY_CALLDATA,
           1,
         );
         await expect(
@@ -913,7 +940,7 @@ describe("L2MessageService", () => {
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
             postmanAddress.address,
-            "0x",
+            EMPTY_CALLDATA,
             1,
           ),
         ).to.be.revertedWithCustomError(l2MessageService, "MessageDoesNotExistOrHasAlreadyBeenClaimed");
@@ -926,7 +953,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         const expectedSecondBytes = await encodeSendMessage(
@@ -935,7 +962,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           2n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
@@ -957,8 +984,8 @@ describe("L2MessageService", () => {
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
-            ethers.ZeroAddress,
-            "0x",
+            ADDRESS_ZERO,
+            EMPTY_CALLDATA,
             1,
           );
 
@@ -971,8 +998,8 @@ describe("L2MessageService", () => {
             notAuthorizedAccount.address,
             MESSAGE_FEE,
             MESSAGE_VALUE_1ETH,
-            ethers.ZeroAddress,
-            "0x",
+            ADDRESS_ZERO,
+            EMPTY_CALLDATA,
             2,
           );
 
@@ -995,7 +1022,7 @@ describe("L2MessageService", () => {
           0n,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
         const destinationBalance = await ethers.provider.getBalance(notAuthorizedAccount.address);
 
@@ -1017,8 +1044,8 @@ describe("L2MessageService", () => {
             notAuthorizedAccount.address,
             0,
             MESSAGE_VALUE_1ETH,
-            ethers.ZeroAddress,
-            "0x",
+            ADDRESS_ZERO,
+            EMPTY_CALLDATA,
             1,
           );
 
@@ -1055,7 +1082,7 @@ describe("L2MessageService", () => {
           .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
         const storedSenderBeforeSending = await l2MessageService.originalSender();
-        expect(storedSenderBeforeSending).to.be.equal(ethers.ZeroAddress);
+        expect(storedSenderBeforeSending).to.be.equal(ADDRESS_ZERO);
 
         await expect(
           l2MessageService
@@ -1065,7 +1092,7 @@ describe("L2MessageService", () => {
               await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.ZeroAddress,
+              ADDRESS_ZERO,
               sendCalldata,
               1,
             ),
@@ -1096,19 +1123,20 @@ describe("L2MessageService", () => {
         await l2MessageService
           .connect(l1l2MessageSetter)
           .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .claimMessage(
-              await l2MessageService.getAddress(),
-              await l2MessageService.getAddress(),
-              MESSAGE_FEE,
-              MESSAGE_VALUE_1ETH,
-              ethers.ZeroAddress,
-              callSignature,
-              1,
-            ),
-        ).to.be.revertedWith("ReentrancyGuard: reentrant call");
+
+        const claimMessageCall = l2MessageService
+          .connect(admin)
+          .claimMessage(
+            await l2MessageService.getAddress(),
+            await l2MessageService.getAddress(),
+            MESSAGE_FEE,
+            MESSAGE_VALUE_1ETH,
+            ADDRESS_ZERO,
+            callSignature,
+            1,
+          );
+
+        await expectRevertWithReason(claimMessageCall, "ReentrancyGuard: reentrant call");
       });
 
       it("Should fail when the destination errors through receive", async () => {
@@ -1118,7 +1146,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
@@ -1139,8 +1167,8 @@ describe("L2MessageService", () => {
               await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.ZeroAddress,
-              "0x",
+              ADDRESS_ZERO,
+              EMPTY_CALLDATA,
               1,
             ),
         ).to.be.reverted;
@@ -1178,7 +1206,7 @@ describe("L2MessageService", () => {
               await l2MessageService.getAddress(),
               MESSAGE_FEE,
               MESSAGE_VALUE_1ETH,
-              ethers.ZeroAddress,
+              ADDRESS_ZERO,
               "0x1234",
               1,
             ),
@@ -1209,21 +1237,21 @@ describe("L2MessageService", () => {
           .connect(l1l2MessageSetter)
           .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .claimMessage(
-              await l2MessageService.getAddress(),
-              await l2MessageService.getAddress(),
-              MESSAGE_FEE,
-              MESSAGE_VALUE_1ETH,
-              ethers.ZeroAddress,
-              "0xfc13b6f3",
-              1,
-            ),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "MessageSendingFailed")
-          .withArgs(await l2MessageService.getAddress());
+        const claimMessageCall = l2MessageService
+          .connect(admin)
+          .claimMessage(
+            await l2MessageService.getAddress(),
+            await l2MessageService.getAddress(),
+            MESSAGE_FEE,
+            MESSAGE_VALUE_1ETH,
+            ADDRESS_ZERO,
+            "0xfc13b6f3",
+            1,
+          );
+
+        await expectRevertWithCustomError(l2MessageService, claimMessageCall, "MessageSendingFailed", [
+          await l2MessageService.getAddress(),
+        ]);
 
         expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
@@ -1237,7 +1265,7 @@ describe("L2MessageService", () => {
           MESSAGE_FEE,
           MESSAGE_VALUE_1ETH,
           1n,
-          "0x",
+          EMPTY_CALLDATA,
         );
 
         await l2MessageService.addFunds({ value: INITIAL_WITHDRAW_LIMIT });
@@ -1250,21 +1278,21 @@ describe("L2MessageService", () => {
           .connect(l1l2MessageSetter)
           .anchorL1L2MessageHashes(expectedBytesArray, 2, 2, expectedRollingHash);
 
-        await expect(
-          l2MessageService
-            .connect(admin)
-            .claimMessage(
-              await l2MessageService.getAddress(),
-              admin.address,
-              MESSAGE_FEE,
-              MESSAGE_VALUE_1ETH,
-              await l2MessageService.getAddress(),
-              "0x",
-              1,
-            ),
-        )
-          .to.be.revertedWithCustomError(l2MessageService, "FeePaymentFailed")
-          .withArgs(await l2MessageService.getAddress());
+        const claimMessageCall = l2MessageService
+          .connect(admin)
+          .claimMessage(
+            await l2MessageService.getAddress(),
+            admin.address,
+            MESSAGE_FEE,
+            MESSAGE_VALUE_1ETH,
+            await l2MessageService.getAddress(),
+            EMPTY_CALLDATA,
+            1,
+          );
+
+        await expectRevertWithCustomError(l2MessageService, claimMessageCall, "FeePaymentFailed", [
+          await l2MessageService.getAddress(),
+        ]);
 
         expect(await l2MessageService.inboxL1L2MessageStatus(ethers.keccak256(expectedBytes))).to.be.equal(
           INBOX_STATUS_RECEIVED,
@@ -1294,8 +1322,9 @@ describe("L2MessageService", () => {
     it("Should fail pausing as non-pauser", async () => {
       expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
 
-      await expect(l2MessageService.connect(admin).pauseByType(GENERAL_PAUSE_TYPE)).to.be.revertedWith(
-        "AccessControl: account " + admin.address.toLowerCase() + " is missing role " + PAUSE_MANAGER_ROLE,
+      await expectRevertWithReason(
+        l2MessageService.connect(admin).pauseByType(GENERAL_PAUSE_TYPE),
+        buildAccessErrorMessage(admin, PAUSE_MANAGER_ROLE),
       );
 
       expect(await l2MessageService.isPaused(GENERAL_PAUSE_TYPE)).to.be.false;
@@ -1317,7 +1346,7 @@ describe("L2MessageService", () => {
 
       await l2MessageService
         .connect(admin)
-        .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT });
+        .sendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
 
       usedAmount = await l2MessageService.currentPeriodAmountInWei();
       expect(usedAmount).to.be.equal(INITIAL_WITHDRAW_LIMIT);
@@ -1333,13 +1362,14 @@ describe("L2MessageService", () => {
 
       await l2MessageService
         .connect(admin)
-        .sendMessage(notAuthorizedAccount.address, 0, "0x", { value: INITIAL_WITHDRAW_LIMIT });
+        .sendMessage(notAuthorizedAccount.address, 0, EMPTY_CALLDATA, { value: INITIAL_WITHDRAW_LIMIT });
 
       usedAmount = await l2MessageService.currentPeriodAmountInWei();
       expect(usedAmount).to.be.equal(INITIAL_WITHDRAW_LIMIT);
 
-      await expect(l2MessageService.connect(admin).resetAmountUsedInPeriod()).to.be.revertedWith(
-        "AccessControl: account " + admin.address.toLowerCase() + " is missing role " + RATE_LIMIT_SETTER_ROLE,
+      await expectRevertWithReason(
+        l2MessageService.connect(admin).resetAmountUsedInPeriod(),
+        buildAccessErrorMessage(admin, RATE_LIMIT_SETTER_ROLE),
       );
 
       usedAmount = await l2MessageService.currentPeriodAmountInWei();

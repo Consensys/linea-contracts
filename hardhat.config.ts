@@ -38,7 +38,6 @@ const config: HardhatUserConfig = {
             enabled: true,
             runs: 100000,
           },
-          evmVersion: "london",
         },
       },
       {
@@ -66,17 +65,25 @@ const config: HardhatUserConfig = {
       accounts: [process.env.MAINNET_PRIVATE_KEY || EMPTY_HASH],
       url: "https://mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
-    linea_mainnet: {
-      accounts: [process.env.LINEA_MAINNET_PRIVATE_KEY || EMPTY_HASH],
-      url: "https://linea-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
+    sepolia: {
+      accounts: [process.env.SEPOLIA_PRIVATE_KEY || EMPTY_HASH],
+      url: "https://sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     goerli: {
       accounts: [process.env.GOERLI_PRIVATE_KEY || EMPTY_HASH],
       url: "https://goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
+    linea_mainnet: {
+      accounts: [process.env.LINEA_MAINNET_PRIVATE_KEY || EMPTY_HASH],
+      url: "https://linea-mainnet.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
     linea_goerli: {
       accounts: [process.env.LINEA_GOERLI_PRIVATE_KEY || EMPTY_HASH],
       url: "https://linea-goerli.infura.io/v3/" + process.env.INFURA_API_KEY,
+    },
+    linea_sepolia: {
+      accounts: [process.env.LINEA_SEPOLIA_PRIVATE_KEY || EMPTY_HASH],
+      url: "https://linea-sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
     },
     custom: {
       accounts: [process.env.CUSTOM_PRIVATE_KEY || EMPTY_HASH],
@@ -104,6 +111,8 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: process.env.ETHERSCAN_API_KEY ?? "",
       goerli: process.env.ETHERSCAN_API_KEY ?? "",
+      sepolia: process.env.ETHERSCAN_API_KEY ?? "",
+      linea_sepolia: process.env.LINEASCAN_API_KEY ?? "",
       linea_goerli: process.env.LINEASCAN_API_KEY ?? "",
       linea_mainnet: process.env.LINEASCAN_API_KEY ?? "",
     },
@@ -114,6 +123,14 @@ const config: HardhatUserConfig = {
         urls: {
           apiURL: "https://api-goerli.lineascan.build/api",
           browserURL: "https://goerli.lineascan.build/",
+        },
+      },
+      {
+        network: "linea_sepolia",
+        chainId: 59141,
+        urls: {
+          apiURL: "https://api-sepolia.lineascan.build/api",
+          browserURL: "https://sepolia.lineascan.build/",
         },
       },
       {

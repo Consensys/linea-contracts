@@ -1,14 +1,16 @@
 module.exports = {
+  root: true,
   env: {
-    browser: false,
-    es2021: true,
-    mocha: true,
     node: true,
+    browser: false,
+    es2022: true,
   },
-  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
+  ignorePatterns: ["dist", "coverage"],
+  extends: ["eslint:recommended", "plugin:@typescript-eslint/recommended", "plugin:prettier/recommended"],
   parser: "@typescript-eslint/parser",
   plugins: ["@typescript-eslint", "prettier"],
   parserOptions: {
     ecmaVersion: 12,
+    sourceType: "module",
   },
 };

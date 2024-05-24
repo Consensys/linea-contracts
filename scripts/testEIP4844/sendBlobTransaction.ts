@@ -1,7 +1,5 @@
-import { BytesLike, SigningKey, Transaction, Wallet, ethers } from "ethers";
-import { BlobEIP4844Transaction, BlobEIP4844TxData } from "@ethereumjs/tx";
-import { blobsToCommitments, blobsToProofs, bytesToHex, commitmentsToVersionedHashes, initKZG } from "@ethereumjs/util";
-import { Chain, Common, Hardfork } from "@ethereumjs/common";
+import { BytesLike, Transaction, Wallet, ethers } from "ethers";
+import { commitmentsToVersionedHashes } from "@ethereumjs/util";
 import * as kzg from "c-kzg";
 import submissionDataJson from "./blocks-1-46.json";
 import submissionDataJson2 from "./blocks-47-81.json";
@@ -55,59 +53,6 @@ function kzgCommitmentsToVersionedHashes(commitments: Uint8Array[]): string[] {
   return versionedHashes.map((versionedHash) => ethers.hexlify(versionedHash));
 }
 
-function createEIP4844Transaction(
-  transaction: Transaction,
-  signature: ethers.Signature,
-  blobs: BytesLike[],
-  kzgCommitments: BytesLike[],
-  kzgProofs: BytesLike[],
-): BlobEIP4844Transaction {
-  let common: Common;
-
-  if (Object.values(Chain).includes(parseInt(transaction.chainId.toString()))) {
-    common = new Common({
-      chain: transaction.chainId,
-      hardfork: Hardfork.Cancun,
-      eips: [4844],
-      customCrypto: { kzg },
-    });
-  } else {
-    common = Common.custom(
-      {
-        chainId: transaction.chainId,
-        defaultHardfork: Hardfork.Cancun,
-      },
-      {
-        eips: [4844],
-        customCrypto: { kzg },
-      },
-    );
-  }
-
-  const txData: BlobEIP4844TxData = {
-    value: transaction.value,
-    v: signature.yParity,
-    r: signature.r,
-    s: signature.s,
-    nonce: transaction.nonce,
-    chainId: transaction.chainId,
-    accessList: transaction.accessList,
-    type: transaction.type!,
-    data: transaction.data,
-    gasLimit: transaction.gasLimit,
-    maxPriorityFeePerGas: transaction.maxPriorityFeePerGas!,
-    maxFeePerGas: transaction.maxFeePerGas!,
-    to: transaction.to!,
-    blobVersionedHashes: transaction.blobVersionedHashes!,
-    maxFeePerBlobGas: transaction.maxFeePerBlobGas!,
-    blobs,
-    kzgCommitments,
-    kzgProofs: kzgProofs,
-  };
-
-  return BlobEIP4844Transaction.fromTxData(txData, { common });
-}
-
 async function main() {
   const rpcUrl = requireEnv("RPC_URL");
   const privateKey = requireEnv("PRIVATE_KEY");
@@ -115,9 +60,8 @@ async function main() {
 
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const wallet = new Wallet(privateKey, provider);
-  const signingKey = new SigningKey(privateKey);
 
-  initKZG(kzg, `${__dirname}/trusted_setup.txt`);
+  kzg.loadTrustedSetup(`${__dirname}/trusted_setup.txt`);
 
   const { submissionData, blob } = generateSubmissionDataFromJSON(1, 46, submissionDataJson);
   const { submissionData: submissionData2, blob: blob2 } = generateSubmissionDataFromJSON(47, 81, submissionDataJson2);
@@ -128,92 +72,32 @@ async function main() {
     submissionDataJson4,
   );
 
-  const fullblob = blob;
-  const fullblob2 = blob2;
-  const fullblob3 = blob3;
-  const fullblob4 = blob4;
+  const commitments = kzg.blobToKzgCommitment(blob);
+  const commitments2 = kzg.blobToKzgCommitment(blob2);
+  const commitments3 = kzg.blobToKzgCommitment(blob3);
+  const commitments4 = kzg.blobToKzgCommitment(blob4);
 
-  console.log(fullblob);
-
-  const commitments2 = blobsToCommitments([fullblob2]);
-  const commitments3 = blobsToCommitments([fullblob3]);
-  const commitments4 = blobsToCommitments([fullblob4]);
-
-  const versionedHashes2 = kzgCommitmentsToVersionedHashes(commitments2);
-  const versionedHashes3 = kzgCommitmentsToVersionedHashes(commitments3);
-  const versionedHashes4 = kzgCommitmentsToVersionedHashes(commitments4);
-
-  const kzgProofs2 = blobsToProofs([fullblob2], commitments2);
-  const kzgProofs3 = blobsToProofs([fullblob3], commitments3);
-  const kzgProofs4 = blobsToProofs([fullblob4], commitments4);
-
-  const commitments = blobsToCommitments([fullblob]);
-  const versionedHashes = kzgCommitmentsToVersionedHashes(commitments);
-  const kzgProofs = blobsToProofs([fullblob], commitments);
-
-  console.log(versionedHashes);
-  console.log(commitments.map(bytesToHex));
-  console.log(kzgProofs.map(bytesToHex));
-
-  let encodedCall = encodeCall(submissionData, commitments, submissionDataJson);
-  console.log(encodedCall);
-  await submitBlob(
-    provider,
-    wallet,
-    encodedCall,
-    destinationAddress,
-    versionedHashes,
-    signingKey,
-    fullblob,
+  const [versionedHashes, versionedHashes2, versionedHashes3, versionedHashes4] = kzgCommitmentsToVersionedHashes([
     commitments,
-    kzgProofs,
-    0,
-  );
-
-  encodedCall = encodeCall(submissionData2, commitments2, submissionDataJson2);
-  await submitBlob(
-    provider,
-    wallet,
-    encodedCall,
-    destinationAddress,
-    versionedHashes2,
-    signingKey,
-    fullblob2,
     commitments2,
-    kzgProofs2,
-    1,
-  );
-
-  encodedCall = encodeCall(submissionData3, commitments3, submissionDataJson3);
-  await submitBlob(
-    provider,
-    wallet,
-    encodedCall,
-    destinationAddress,
-    versionedHashes3,
-    signingKey,
-    fullblob3,
     commitments3,
-    kzgProofs3,
-    2,
-  );
-
-  encodedCall = encodeCall(submissionData4, commitments4, submissionDataJson4);
-  await submitBlob(
-    provider,
-    wallet,
-    encodedCall,
-    destinationAddress,
-    versionedHashes4,
-    signingKey,
-    fullblob4,
     commitments4,
-    kzgProofs4,
-    3,
-  );
+  ]);
 
-  await sendProof(aggregateProof1to81, 4);
-  await sendProof(aggregateProof82to153, 0);
+  let encodedCall = encodeCall(submissionData, [commitments], submissionDataJson);
+  await submitBlob(provider, wallet, encodedCall, destinationAddress, [versionedHashes], blob);
+
+  encodedCall = encodeCall(submissionData2, [commitments2], submissionDataJson2);
+  await submitBlob(provider, wallet, encodedCall, destinationAddress, [versionedHashes2], blob2);
+
+  encodedCall = encodeCall(submissionData3, [commitments3], submissionDataJson3);
+  await submitBlob(provider, wallet, encodedCall, destinationAddress, [versionedHashes3], blob3);
+
+  encodedCall = encodeCall(submissionData4, [commitments4], submissionDataJson4);
+  await submitBlob(provider, wallet, encodedCall, destinationAddress, [versionedHashes4], blob4);
+
+  await sendProof(aggregateProof1to81);
+  await sendProof(aggregateProof82to153);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -247,15 +131,11 @@ async function submitBlob(
   encodedCall: string,
   destinationAddress: string,
   versionedHashes: string[],
-  signingKey: SigningKey,
   fullblob: Uint8Array,
-  commitments: BytesLike[],
-  kzgProofs: BytesLike[],
-  nonceOffset: number,
 ) {
   const { maxFeePerGas, maxPriorityFeePerGas } = await provider.getFeeData();
-  let nonce = await provider.getTransactionCount(wallet.address);
-  nonce = nonce + nonceOffset;
+  const nonce = await provider.getTransactionCount(wallet.address);
+
   const transaction = Transaction.from({
     data: encodedCall,
     maxPriorityFeePerGas: maxPriorityFeePerGas!,
@@ -266,21 +146,19 @@ async function submitBlob(
     nonce,
     value: 0,
     gasLimit: 5_000_000,
+    kzg,
+    blobs: [fullblob],
     blobVersionedHashes: versionedHashes,
     maxFeePerBlobGas: maxFeePerGas!,
   });
 
-  const signature = signingKey.sign(transaction.unsignedHash);
-
-  const eip4844Transaction = createEIP4844Transaction(transaction, signature, [fullblob], commitments, kzgProofs);
-  const serializedEip4844Tx = eip4844Transaction.serializeNetworkWrapper();
-  const res = await provider.send("eth_sendRawTransaction", [ethers.hexlify(serializedEip4844Tx)]);
-
-  console.log(res);
+  const tx = await wallet.sendTransaction(transaction);
+  const receipt = await tx.wait();
+  console.log(receipt);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function sendProof(proofFile: any, nonceOffset: number) {
+async function sendProof(proofFile: any) {
   const rpcUrl = requireEnv("RPC_URL");
   const privateKey = requireEnv("PRIVATE_KEY");
   const destinationAddress = requireEnv("DESTINATION_ADDRESS");
@@ -317,10 +195,7 @@ async function sendProof(proofFile: any, nonceOffset: number) {
   ]);
 
   const { maxFeePerGas, maxPriorityFeePerGas } = await provider.getFeeData();
-  let nonce = await provider.getTransactionCount(wallet.address);
-  nonce = nonce + nonceOffset;
-
-  console.log(encodedCall);
+  const nonce = await provider.getTransactionCount(wallet.address);
 
   const transaction = Transaction.from({
     data: encodedCall,
@@ -333,11 +208,9 @@ async function sendProof(proofFile: any, nonceOffset: number) {
     gasLimit: 5_000_000,
   });
 
-  const res = await wallet.sendTransaction(transaction);
-  console.log(res);
-
-  const rec = await res.wait();
-  console.log(rec);
+  const tx = await wallet.sendTransaction(transaction);
+  const receipt = await tx.wait();
+  console.log({ transaction: tx, receipt: receipt });
 }
 
 main()

@@ -31,7 +31,7 @@ describe("SparseMerkleProof", () => {
           },
         } = merkleProofTestData;
 
-        const stateRoot = "0x21c232d5a976e50550df25f9e87517a77df4dcd85e3462af1ab380bae11b4455";
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
         const leafIndex = 200;
         const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
 
@@ -45,8 +45,7 @@ describe("SparseMerkleProof", () => {
             leafIndex,
           },
         } = merkleProofTestData;
-        // blockNumber: 3460924;
-        const stateRoot = "0x0e1f20b74aeb5103431c6a0fbb7a2fdc0b2cdc38ba2104cfa6229a3606ccd798";
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
 
         const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
 
@@ -64,7 +63,7 @@ describe("SparseMerkleProof", () => {
           ],
         } = merkleProofTestData;
 
-        const stateRoot = "0x21c232d5a976e50550df25f9e87517a77df4dcd85e3462af1ab380bae11b4455";
+        const stateRoot = "0x0d2a66d5598b4fc5482c311f22d2dc657579b5452ab4b3e60fb1a9e9dbbfc99e";
         const leafIndex = 200;
         const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
 
@@ -72,20 +71,16 @@ describe("SparseMerkleProof", () => {
       });
 
       it("Should return true when the storage proof is correct", async () => {
-        const {
-          storageProofs: [
-            {
-              proof: { proofRelatedNodes },
-              leafIndex,
-            },
-          ],
-        } = merkleProofTestData;
-        // blockNumber: 3460924;
-        const stateRoot = "0x0bb8293ebdb6a709dcaa06e52831d1ad6054c037a2c70a32d17b71ccd65b53f9";
+        const { storageProofs } = merkleProofTestData;
+        const stateRoot = "0x0d2a66d5598b4fc5482c311f22d2dc657579b5452ab4b3e60fb1a9e9dbbfc99e";
 
-        const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
-
-        expect(result).to.be.true;
+        for (const {
+          proof: { proofRelatedNodes },
+          leafIndex,
+        } of storageProofs) {
+          const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
+          expect(result).to.be.true;
+        }
       });
     });
   });
@@ -99,7 +94,7 @@ describe("SparseMerkleProof", () => {
       } = merkleProofTestData;
 
       const hVal = await sparseMerkleProof.hashAccountValue(value);
-      expect(hVal).to.be.equal("0x0040b41c9882018b27400a081b06ae7267a2336447df05f7e4e44c0d29d74121");
+      expect(hVal).to.be.equal("0x05d9557beb35be64f9f0be17af76dd4f19d5016b4108ce8a552458dcf8ec6d4b");
     });
   });
 
@@ -113,7 +108,7 @@ describe("SparseMerkleProof", () => {
         ],
       } = merkleProofTestData;
       const hVal = await sparseMerkleProof.hashStorageValue(value);
-      expect(hVal).to.be.equal("0x045f00303c14e5eb434ef44b58ecf209715378b062f60b347139f473f6e61a46");
+      expect(hVal).to.be.equal("0x0cbfc04518a70ed18917be26dbd0efdf4c1f9f3def6d5de2b0bbd5c82b5e9c2d");
     });
   });
 
@@ -142,10 +137,10 @@ describe("SparseMerkleProof", () => {
 
         const leaf = await sparseMerkleProof.getLeaf(proofRelatedNodes[proofRelatedNodes.length - 1]);
 
-        expect(leaf.prev).to.be.equal(2090373);
-        expect(leaf.next).to.be.equal(2975408);
-        expect(leaf.hKey).to.be.equal("0x09f049109ce672e71c951ca4dc0444f96b81d08df4d875d811760e1f49deaa7d");
-        expect(leaf.hValue).to.be.equal("0x0040b41c9882018b27400a081b06ae7267a2336447df05f7e4e44c0d29d74121");
+        expect(leaf.prev).to.be.equal(17750);
+        expect(leaf.next).to.be.equal(13571);
+        expect(leaf.hKey).to.be.equal("0x04f760ecc308f2f05e90be61b302e78e046595681e1a17c054ee417ffe5ac310");
+        expect(leaf.hValue).to.be.equal("0x05d9557beb35be64f9f0be17af76dd4f19d5016b4108ce8a552458dcf8ec6d4b");
       });
     });
 
@@ -177,10 +172,10 @@ describe("SparseMerkleProof", () => {
 
         const leaf = await sparseMerkleProof.getLeaf(proofRelatedNodes[proofRelatedNodes.length - 1]);
 
-        expect(leaf.prev).to.be.equal(264883);
-        expect(leaf.next).to.be.equal(147462);
-        expect(leaf.hKey).to.be.equal("0x0aff320fd77e6145e4e371459658c9cb30ec26baba0558ef57a373a8c75cfc31");
-        expect(leaf.hValue).to.be.equal("0x045f00303c14e5eb434ef44b58ecf209715378b062f60b347139f473f6e61a46");
+        expect(leaf.prev).to.be.equal(2);
+        expect(leaf.next).to.be.equal(5);
+        expect(leaf.hKey).to.be.equal("0x01d265eebbf22fa41219519f676c05b01abaa5aca7abdb186422044c2971c80a");
+        expect(leaf.hValue).to.be.equal("0x0cbfc04518a70ed18917be26dbd0efdf4c1f9f3def6d5de2b0bbd5c82b5e9c2d");
       });
     });
   });
@@ -210,11 +205,11 @@ describe("SparseMerkleProof", () => {
       const account = await sparseMerkleProof.getAccount(value);
 
       expect(account.nonce).to.be.equal(1);
-      expect(account.balance).to.be.equal("993942244765750129749953953");
-      expect(account.storageRoot).to.be.equal("0x0bb8293ebdb6a709dcaa06e52831d1ad6054c037a2c70a32d17b71ccd65b53f9");
-      expect(account.mimcCodeHash).to.be.equal("0x07febcc933327a6488b2d38ed12b2ec3f8a4ddc8363478764c026171c62aa94b");
-      expect(account.keccakCodeHash).to.be.equal("0x6bec2bf64f7e824109f6ed55f77dd7665801d6195e461666ad6a5342a9f6daf5");
-      expect(account.codeSize).to.be.equal(2112);
+      expect(account.balance).to.be.equal(0);
+      expect(account.storageRoot).to.be.equal("0x0d2a66d5598b4fc5482c311f22d2dc657579b5452ab4b3e60fb1a9e9dbbfc99e");
+      expect(account.mimcCodeHash).to.be.equal("0x00c24dd0468f02fbece668291f3c3eb20e06d1baec856f28430555967f2bf280");
+      expect(account.keccakCodeHash).to.be.equal("0xd798c662debc23e8199fbf0b0a3a95649f2defe90af458d7f62c03881f916b3f");
+      expect(account.codeSize).to.be.equal(12336);
     });
   });
 
@@ -228,7 +223,7 @@ describe("SparseMerkleProof", () => {
 
       const hashedValue = await sparseMerkleProof.mimcHash(value);
 
-      expect(hashedValue).to.be.equal("0x119a4afb7f27c66df406cb692ac3010d924a10a9e6c8d867772c1370a06cbc22");
+      expect(hashedValue).to.be.equal("0x0b99084c8c6234d0765eca2bc776c654f8b62ffc0aa3d0990b69e2aef431e732");
     });
   });
 });
