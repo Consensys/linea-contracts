@@ -6,6 +6,8 @@
 **Open Zeppelin**
 - Gas optimization audit: https://blog.openzeppelin.com/linea-gas-optimizations-audit
 
+**Cyfrin**
+- Full codebase audit: https://github.com/Cyfrin/cyfrin-audit-reports/blob/main/reports/2024-05-24-cyfrin-linea-v2.0.pdf 
 
 ### Third Audit Round
 **Open Zeppelin**
