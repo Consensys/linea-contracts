@@ -4,6 +4,7 @@ import { ethers } from "hardhat";
 import { Mimc, SparseMerkleProof } from "../typechain-types";
 import merkleProofTestData from "./testData/merkle-proof-data.json";
 import { deployFromFactory } from "./utils/deployment";
+import { expectRevertWithCustomError } from "./utils/helpers";
 
 describe("SparseMerkleProof", () => {
   let sparseMerkleProof: SparseMerkleProof;
@@ -24,6 +25,88 @@ describe("SparseMerkleProof", () => {
 
   describe("verifyProof", () => {
     describe("account proof", () => {
+      it("Should revert when proof length is < 42", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+          },
+        } = merkleProofTestData;
+
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
+        const leafIndex = 200;
+
+        const proofRelatedNodesPopped = proofRelatedNodes.slice(0, proofRelatedNodes.length - 1);
+
+        await expectRevertWithCustomError(
+          sparseMerkleProof,
+          sparseMerkleProof.verifyProof(proofRelatedNodesPopped, leafIndex, stateRoot),
+          "WrongProofLength",
+          [42, 41],
+        );
+      });
+
+      it("Should revert when proof length is > 42", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+          },
+        } = merkleProofTestData;
+
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
+        const leafIndex = 200;
+
+        const clonedProof = proofRelatedNodes.slice(0, proofRelatedNodes.length);
+        clonedProof.push("0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0");
+
+        await expectRevertWithCustomError(
+          sparseMerkleProof,
+          sparseMerkleProof.verifyProof(clonedProof, leafIndex, stateRoot),
+          "WrongProofLength",
+          [42, 43],
+        );
+      });
+
+      it("Should revert when a value is not mod 32", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+          },
+        } = merkleProofTestData;
+
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
+        const leafIndex = 200;
+
+        const clonedProof = proofRelatedNodes.slice(0, proofRelatedNodes.length);
+        clonedProof[40] = "0x1234"; // set the second last item in the array
+
+        await expectRevertWithCustomError(
+          sparseMerkleProof,
+          sparseMerkleProof.verifyProof(clonedProof, leafIndex, stateRoot),
+          "LengthNotMod32",
+        );
+      });
+
+      it("Should revert when index 0 is not 64 bytes", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+          },
+        } = merkleProofTestData;
+
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
+        const leafIndex = 200;
+
+        const clonedProof = proofRelatedNodes.slice(0, proofRelatedNodes.length);
+        clonedProof[0] = "0x1234";
+
+        await expectRevertWithCustomError(
+          sparseMerkleProof,
+          sparseMerkleProof.verifyProof(clonedProof, leafIndex, stateRoot),
+          "WrongBytesLength",
+          [64, 2],
+        );
+      });
+
       it("Should return false when the account proof is not correct", async () => {
         const {
           accountProof: {
@@ -36,6 +119,25 @@ describe("SparseMerkleProof", () => {
         const result = await sparseMerkleProof.verifyProof(proofRelatedNodes, leafIndex, stateRoot);
 
         expect(result).to.be.false;
+      });
+
+      it("Should revert when leaf index is higher than max leaf index", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+            leafIndex,
+          },
+        } = merkleProofTestData;
+
+        const higherLeafIndex = leafIndex + Math.pow(2, 40);
+
+        const stateRoot = "0x0e080582960965e3c180b1457b16da48041e720af628ae6c1725d13bd98ba9f0";
+
+        await expectRevertWithCustomError(
+          sparseMerkleProof,
+          sparseMerkleProof.verifyProof(proofRelatedNodes, higherLeafIndex, stateRoot),
+          "MaxTreeLeafIndexExceed",
+        );
       });
 
       it("Should return true when the account proof is correct", async () => {
@@ -96,6 +198,29 @@ describe("SparseMerkleProof", () => {
       const hVal = await sparseMerkleProof.hashAccountValue(value);
       expect(hVal).to.be.equal("0x05d9557beb35be64f9f0be17af76dd4f19d5016b4108ce8a552458dcf8ec6d4b");
     });
+
+    it("Should error if less than 192 length", async () => {
+      const shortValue = "0x0012";
+
+      await expectRevertWithCustomError(
+        sparseMerkleProof,
+        sparseMerkleProof.hashAccountValue(shortValue),
+        "WrongBytesLength",
+        [192, 2],
+      );
+    });
+
+    it("Should error if more than 192 length", async () => {
+      const longValue =
+        "0x000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000d2a66d5598b4fc5482c311f22d2dc657579b5452ab4b3e60fb1a9e9dbbfc99e00c24dd0468f02fbece668291f3c3eb20e06d1baec856f28430555967f2bf280d798c662debc23e8199fbf0b0a3a95649f2defe90af458d7f62c03881f916b3f0000000000000000000000000000000000000000000000000000000000003030454748";
+
+      await expectRevertWithCustomError(
+        sparseMerkleProof,
+        sparseMerkleProof.hashAccountValue(longValue),
+        "WrongBytesLength",
+        [192, 195],
+      );
+    });
   });
 
   describe("hashStorageValue", () => {
@@ -122,6 +247,20 @@ describe("SparseMerkleProof", () => {
         } = merkleProofTestData;
 
         const wrongLeaftValue = `0x${proofRelatedNodes[proofRelatedNodes.length - 1].slice(4)}`;
+
+        await expect(sparseMerkleProof.getLeaf(wrongLeaftValue))
+          .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
+          .withArgs(128, ethers.dataLength(wrongLeaftValue));
+      });
+
+      it("Should revert when leaf bytes length > 128", async () => {
+        const {
+          accountProof: {
+            proof: { proofRelatedNodes },
+          },
+        } = merkleProofTestData;
+
+        const wrongLeaftValue = `${proofRelatedNodes[proofRelatedNodes.length - 1]}1234`;
 
         await expect(sparseMerkleProof.getLeaf(wrongLeaftValue))
           .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
@@ -189,6 +328,20 @@ describe("SparseMerkleProof", () => {
       } = merkleProofTestData;
 
       const wrongAccountValue = `0x${value.slice(4)}`;
+
+      await expect(sparseMerkleProof.getAccount(wrongAccountValue))
+        .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
+        .withArgs(192, ethers.dataLength(wrongAccountValue));
+    });
+
+    it("Should revert when account bytes length > 192", async () => {
+      const {
+        accountProof: {
+          proof: { value },
+        },
+      } = merkleProofTestData;
+
+      const wrongAccountValue = `${value}123456`;
 
       await expect(sparseMerkleProof.getAccount(wrongAccountValue))
         .to.revertedWithCustomError(sparseMerkleProof, "WrongBytesLength")
