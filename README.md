@@ -2,6 +2,8 @@
 
 ## Audits
 ### Fourth Audit Round (Latest)
+**Diligence**
+- Differential audit since second audit round: https://consensys.io/diligence/audits/2024/07/linea-rollup-update/
 
 **Open Zeppelin**
 - Gas optimization audit: https://blog.openzeppelin.com/linea-gas-optimizations-audit
