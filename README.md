@@ -1,7 +1,12 @@
 # linea-contracts
 
+## <span style="color: yellow;">Deprecation notice</span>
+This repository is deprecated and the Linea smart-contracts are available at the [Linea Monorepo](https://github.com/Consensys/linea-monorepo/)
+
 ## Audits
 ### Fourth Audit Round (Latest)
+**Diligence**
+- Differential audit since second audit round: https://consensys.io/diligence/audits/2024/07/linea-rollup-update/
 
 **Open Zeppelin**
 - Gas optimization audit: https://blog.openzeppelin.com/linea-gas-optimizations-audit
