@@ -1,5 +1,9 @@
 # linea-contracts
 
+## <span style="color: yellow;">Pending deprecation notice</span>
+
+This repository will soon be deprecated and the Linea smart contracts will be available at the [Linea Monorepo](https://github.com/Consensys/linea-monorepo/contracts)
+
 ## Audits
 ### Fourth Audit Round (Latest)
 **Diligence**
